@@ -1,0 +1,118 @@
+Stock ADI is not within selling parameters
+Stock AREB is not within selling parameters
+Stock JEPQ is not within selling parameters
+Stock MO is not within buying parameters
+Stock WIX is not within selling parameters
+Stock SDS is not within buying parameters
+Stock TSLQ is not within selling parameters
+Stock DHX is not within buying parameters
+Stock ESTC is not within buying parameters
+Stock CVX is not within buying parameters
+Stock NVDA is not within selling parameters
+Stock RIVN is not within buying parameters
+Stock WMT is not within selling parameters
+Stock EBAY is not within selling parameters
+Stock ARLP is not within buying parameters
+Stock M is not within selling parameters
+Stock MU is not within selling parameters
+No option contract available for  JMP
+Stock SLCA is not within selling parameters
+Stock SOXS is not within buying parameters
+Stock TKO is not within buying parameters
+Stock URBN is not within selling parameters
+Stock ELAN is not within selling parameters
+Stock PANW is not within buying parameters
+Stock NTAP is not within selling parameters
+The symbols to go long on are:
+ ['ADI', 'AREB', 'JEPQ', 'WIX', 'TSLQ', 'NVDA', 'WMT', 'EBAY', 'M', 'MU', 'SLCA', 'URBN', 'ELAN', 'NTAP']
+, The symbols to go short on are:
+ ['MO', 'SDS', 'DHX', 'ESTC', 'CVX', 'RIVN', 'ARLP', 'SOXS', 'TKO', 'PANW']
+Call options for  ADI  are not within buying parameters
+Call options for  AREB  are not within buying parameters
+Call options for  JEPQ  are:
+               Symbol         E Date  S Price  A Price      IV  Delta  Vol
+2024-05-17:72   JEPQ  2024-05-17:72     53.0     0.95  11.277  0.438   22
+Call options for  WIX  are not within buying parameters
+Call options for  TSLQ  are not within buying parameters
+Call options for  NVDA  are not within buying parameters
+Call options for  WMT  are:
+                Symbol          E Date  S Price  A Price      IV  Delta  Vol
+2026-01-16:681    WMT  2026-01-16:681     61.0     0.84  16.963  0.366  170
+Call options for  EBAY  are:
+               Symbol         E Date  S Price  A Price      IV  Delta  Vol
+2024-04-19:44   EBAY  2024-04-19:44     52.5     0.83  26.113   0.29   66
+Call options for  M  are:
+               Symbol         E Date  S Price  A Price      IV  Delta  Vol
+2024-03-28:22      M  2024-03-28:22     20.5     0.97  46.411  0.464   17
+Call options for  MU  are not within buying parameters
+Call options for  SLCA  are:
+                Symbol          E Date  S Price  A Price      IV  Delta  Vol
+2024-06-21:107   SLCA  2024-06-21:107     12.0      0.9  42.115  0.477    1
+Call options for  URBN  are:
+              Symbol        E Date  S Price  A Price      IV  Delta  Vol
+2024-03-08:2   URBN  2024-03-08:2     44.0     0.55  37.463  0.425    6
+Call options for  ELAN  are:
+               Symbol         E Date  S Price  A Price      IV  Delta   Vol
+2024-04-19:44   ELAN  2024-04-19:44     16.0     0.95  42.898  0.506  4479
+Call options for  NTAP  are not within buying parameters
+Put options for  MO  are:
+              Symbol        E Date  S Price  A Price      IV  Delta  Vol
+2024-03-15:9     MO  2024-03-15:9     40.0     0.47  16.707 -0.497  521
+Put options for  SDS  are:
+              Symbol        E Date  S Price  A Price      IV  Delta  Vol
+2024-03-15:9    SDS  2024-03-15:9     27.0     0.65  25.907 -0.566   31
+Put options for  DHX  are:
+                Symbol          E Date  S Price  A Price      IV  Delta  Vol
+2024-08-16:163    DHX  2024-08-16:163      3.0      0.8  70.636 -0.541    0
+Put options for  ESTC  are not within buying parameters
+Put options for  CVX  are not within buying parameters
+Put options for  RIVN  are:
+               Symbol         E Date  S Price  A Price      IV  Delta  Vol
+2024-03-28:22   RIVN  2024-03-28:22     11.0     0.95  82.518 -0.461  120
+Put options for  ARLP  are not within buying parameters
+Put options for  SOXS  are:
+               Symbol         E Date  S Price  A Price     IV  Delta  Vol
+2024-04-12:37   SOXS  2024-04-12:37      3.5     0.69  376.8 -0.122   82
+Put options for  TKO  are not within buying parameters
+Put options for  PANW  are not within buying parameters
+   Symbol          E Date  S Price  A Price        IV  Delta      Vol
+0    JEPQ    2024-03-15:9    53.00     0.30     9.170  0.446    100.0
+1    JEPQ   2024-04-19:44    53.00     0.65    10.486  0.431     81.0
+2    JEPQ   2024-05-17:72    53.00     0.95    11.277  0.438     22.0
+3     WMT    2024-03-08:2    60.83     0.15    17.406  0.238  11800.0
+4     WMT    2024-03-15:9    60.83     0.32    15.605  0.303   3728.0
+5     WMT   2024-03-22:16    61.67     0.26    15.385  0.212   1542.0
+6     WMT   2024-03-28:22    61.67     0.34    14.978  0.247    730.0
+7     WMT   2024-04-05:30    61.67     0.47    14.545  0.289    494.0
+8     WMT   2024-04-12:37    61.67     0.69    14.796  0.332   1671.0
+9     WMT  2026-01-16:681    61.00     0.84    16.963  0.366    170.0
+10   EBAY    2024-03-08:2    51.00     0.23    29.156  0.237    621.0
+11   EBAY    2024-03-15:9    51.00     0.48    25.856  0.321    293.0
+12   EBAY   2024-03-22:16    51.00     0.69    24.831  0.362     59.0
+13   EBAY   2024-03-28:22    51.00     0.85    24.630  0.381     15.0
+14   EBAY   2024-04-19:44    52.50     0.83    26.113  0.290     66.0
+15      M    2024-03-08:2    20.50     0.40    56.122  0.438   1166.0
+16      M    2024-03-15:9    20.50     0.62    53.637  0.452    779.0
+17      M   2024-03-22:16    20.50     0.83    52.882  0.463     42.0
+18      M   2024-03-28:22    20.50     0.97    46.411  0.464     17.0
+19   SLCA    2024-03-15:9    12.00     0.15    38.619  0.235     19.0
+20   SLCA   2024-04-19:44    12.00     0.40    35.102  0.380      1.0
+21   SLCA  2024-06-21:107    12.00     0.90    42.115  0.477      1.0
+22   URBN    2024-03-08:2    44.00     0.55    37.463  0.425      6.0
+23   ELAN    2024-03-15:9    16.00     0.50    43.053  0.501     20.0
+24   ELAN   2024-04-19:44    16.00     0.95    42.898  0.506   4479.0
+25     MO    2024-03-08:2    40.00     0.30    16.250 -0.523    748.0
+26     MO    2024-03-15:9    40.00     0.47    16.707 -0.497    521.0
+27    SDS    2024-03-15:9    27.00     0.65    25.907 -0.566     31.0
+28    DHX    2024-03-15:9     3.00     0.55    83.710 -0.872      0.0
+29    DHX   2024-05-17:72     3.00     0.70    89.788 -0.583      0.0
+30    DHX  2024-08-16:163     3.00     0.80    70.636 -0.541      0.0
+31   RIVN    2024-03-08:2    11.00     0.51    94.808 -0.509   2026.0
+32   RIVN    2024-03-15:9    11.00     0.67    87.795 -0.489    281.0
+33   RIVN   2024-03-28:22    11.00     0.95    82.518 -0.461    120.0
+34   SOXS    2024-03-08:2     3.50     0.20  1606.186 -0.097    957.0
+35   SOXS    2024-03-15:9     3.50     0.27  1182.756 -0.071    380.0
+36   SOXS   2024-03-22:16     3.50     0.40  1059.599 -0.054     21.0
+37   SOXS   2024-03-28:22     3.50     0.49   421.452 -0.132     57.0
+38   SOXS   2024-04-05:30     3.50     0.59   383.027 -0.129     52.0
+39   SOXS   2024-04-12:37     3.50     0.69   376.800 -0.122     82.0

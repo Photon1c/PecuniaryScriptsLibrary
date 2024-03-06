@@ -1,0 +1,19 @@
+Types of charts to be generated here:
+
+Option payoff diagrams
+
+Tangency portfolios on the efficient frontier.
+
+Linear periodic returns
+
+Net burn rates
+
+Profitability ratios
+
+News Sentiment Analysis
+
+Option Chain Scenario Analysis
+
+Sensitivity and Stress Tests
+
+Greeks Generator

@@ -58,4 +58,4 @@ ranked_stocks = rank_stocks_by_ripples(ripples, weekly_returns)
 # Display top-ranked stocks
 ranked_df = pd.DataFrame(ranked_stocks, columns=["Ticker", "Ripple Score", "Expected Weekly Return"])
 display(ranked_df)  # For Jupyter notebooks
-ranked_df.to_csv(r"F:\output\text_reports\report2.csv")
+ranked_df.to_csv(r"Path:\To\Output\Report.csv")

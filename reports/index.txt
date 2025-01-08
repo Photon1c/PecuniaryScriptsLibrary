@@ -1,1 +1,6 @@
 OptionChainAnalyzer.ipynb is a jupyter notebook with functions to aid in the generation of thorough financial option chain reports.
+
+custom-financial-tearsheet-StillWaterCapital-sandbox-deployment-versionE.ipynb is a tearsheet generator, selected as a sample.
+
+ripple_analyzer.py follows the logic of Johansen-Ledoit-Sornette by screening for precursory "ripple effects" in a list of stocks.
+

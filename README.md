@@ -1,4 +1,4 @@
-# Pecuniary Module Library
+# Pecuniary Script Library
 
 ![Logo](/inputs/logo.png)
 

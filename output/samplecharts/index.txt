@@ -1,4 +1,6 @@
-Types of charts to be generated here:
+Types of charts to be generated here and in scripts in this repository (not all are included yet, check back for samples to be continually added):
+
+4D option gamma throttle 
 
 Option payoff diagrams
 

@@ -1,4 +1,7 @@
 # Pecuniary Module Library
+
+![Logo](/inputs/logo.png)
+
 A collection of scripts to speed up the process of batch processing input lists through screeners and visualizer output generators.
 
 The sequence of steps is as follows:

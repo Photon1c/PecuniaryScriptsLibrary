@@ -1,0 +1,13 @@
+## Index
+
+OptionChainAnalyzer.ipynb is a jupyter notebook with functions to aid in the generation of thorough financial option chain reports.  
+
+custom-financial-tearsheet-StillWaterCapital-sandbox-deployment-versionE.ipynb is a tearsheet generator, selected as a sample.  
+
+ripple_analyzer.py follows the logic of Johansen-Ledoit-Sornette by screening for precursory "ripple effects" in a list of stocks.  
+
+3D-yf-Analysis-v1.ipynb generates a 3D volume and stock price chart for a user selected stock.  
+
+OptionChainFlightThrottleAnalyzer.ipynb generates a 4D chart to model an option chain's Gamma trajectory.  
+
+FinancialAnalysisReportGenerator.ipynb generates a table and charts to aid in measuring directional momentum for stocks.

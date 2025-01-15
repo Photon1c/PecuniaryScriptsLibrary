@@ -4,7 +4,7 @@
 
 A collection of scripts to speed up the process of batch processing input lists through screeners and visualizer output generators.
 
-The sequence of steps is as follows:
+The sequence of steps that these script adhere to is as follows:
 
 -Retrieve a list of stock tickers.  
 -Iterate them through screening functions.  

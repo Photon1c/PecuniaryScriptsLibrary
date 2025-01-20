@@ -10,4 +10,6 @@ ripple_analyzer.py follows the logic of Johansen-Ledoit-Sornette by screening fo
 
 OptionChainFlightThrottleAnalyzer.ipynb generates a 4D chart to model an option chain's Gamma trajectory.  
 
-FinancialAnalysisReportGenerator.ipynb generates a table and charts to aid in measuring directional momentum for stocks.
+FinancialAnalysisReportGenerator.ipynb generates a table and charts to aid in measuring directional momentum for stocks.  
+
+Crossover-Backtester.ipynb compares two trading stragies: a buy and hold approach and a EMA signal based procedure.

@@ -2,7 +2,7 @@
 
 ![Logo](/inputs/logo.png)
 
-A collection of scripts to speed up the process of batch processing input lists through screeners and visualizer output generators.
+A collection of financial scripts to speed up the process of batch processing input lists through screeners and visualizer output generators.
 
 The sequence of steps that these scripts adhere to is as follows:
 

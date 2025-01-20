@@ -16,5 +16,6 @@ Check back later as material for this project is released.
 stateDiagram-v2
 Inputs --> Screeners
 Screeners --> Charts
+Charts --> Inputs
 
 ```

@@ -1,4 +1,4 @@
-# Pecuniary Script Library
+# Pecuniary Scripts Library
 
 ![Logo](/inputs/logo.png)
 

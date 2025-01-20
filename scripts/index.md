@@ -12,4 +12,6 @@ OptionChainFlightThrottleAnalyzer.ipynb generates a 4D chart to model an option 
 
 FinancialAnalysisReportGenerator.ipynb generates a table and charts to aid in measuring directional momentum for stocks.  
 
-Crossover-Backtester.ipynb compares two trading stragies: a buy and hold approach and a EMA signal based procedure.
+Crossover-Backtester.ipynb compares two trading stragies: a buy and hold approach and a EMA signal based procedure.  
+
+415Report.ipynb generates a 4:15 risk analysis report on a defined list of stock tickers.

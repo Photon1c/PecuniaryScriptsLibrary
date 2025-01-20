@@ -14,7 +14,7 @@ Check back later as material for this project is released.
 
 ```mermaid
 stateDiagram-v2
-Input --> Screener
-Screener --> Charts
+Inputs --> Screeners
+Screeners --> Charts
 
 ```

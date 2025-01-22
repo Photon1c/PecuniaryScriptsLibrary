@@ -17,3 +17,5 @@ Crossover-Backtester.ipynb compares two trading stragies: a buy and hold approac
 415Report.ipynb generates a 4:15 risk analysis report on a defined list of stock tickers.  
 
 NN-stock-projections.ipynb uses LSTM, Linear, and Amplitude-led projections with yf.
+
+tickers_sector_analysis.py is a script to generate a sector based report for a list of stock tickers.

@@ -6,7 +6,7 @@ from tabulate import tabulate
 
 # List of stock tickers
 #tickers = ['AAPL', 'MSFT', 'GOOGL']  # Add your desired tickers here
-tickers_raw = pd.read_csv(r"F:\inputs\masterlists\holdings.csv")
+tickers_raw = pd.read_csv(r"X:\inputs\masterlists\holdings.csv")
 tickers = tickers_raw["symbol"].to_list()
 # Create a list to store results as dictionaries
 results_list = []

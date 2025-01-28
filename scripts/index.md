@@ -18,4 +18,6 @@ Crossover-Backtester.ipynb compares two trading stragies: a buy and hold approac
 
 NN-stock-projections.ipynb uses LSTM, Linear, and Amplitude-led projections with yf.
 
-tickers_sector_analysis.py is a script to generate a sector based report for a list of stock tickers.
+tickers_sector_analysis.py is a script to generate a sector based report for a list of stock tickers.  
+
+NeuralNetwork-OptionChain.ipynb takes option chain and historical stock price data together and runs a 3-layer neural network on chosen parameters. 

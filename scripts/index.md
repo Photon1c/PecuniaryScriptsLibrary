@@ -21,3 +21,5 @@ NN-stock-projections.ipynb uses LSTM, Linear, and Amplitude-led projections with
 tickers_sector_analysis.py is a script to generate a sector based report for a list of stock tickers.  
 
 NeuralNetwork-OptionChain.ipynb takes option chain and historical stock price data together and runs a 3-layer neural network on chosen parameters. 
+
+ema_analyzer_silver_hawk.py generates a table indicating the EMA divergence of a list of passed stock tickers.

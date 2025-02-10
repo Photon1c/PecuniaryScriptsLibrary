@@ -22,4 +22,6 @@ tickers_sector_analysis.py is a script to generate a sector based report for a l
 
 NeuralNetwork-OptionChain.ipynb takes option chain and historical stock price data together and runs a 3-layer neural network on chosen parameters. 
 
-ema_analyzer_silver_hawk.py generates a table indicating the EMA divergence of a list of passed stock tickers.
+ema_analyzer_silver_hawk.py generates a table indicating the EMA divergence of a list of passed stock tickers.  
+
+advanced_screener_portfolio_manager.py sorts a list of stock tickers into 4 categories to determine actionability.

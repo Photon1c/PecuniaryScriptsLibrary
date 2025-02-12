@@ -25,3 +25,5 @@ NeuralNetwork-OptionChain.ipynb takes option chain and historical stock price da
 ema_analyzer_silver_hawk.py generates a table indicating the EMA divergence of a list of passed stock tickers.  
 
 advanced_screener_portfolio_manager.py sorts a list of stock tickers into 4 categories to determine actionability.
+
+OptionPayoff-AI-Creator.ipynb uses OpenAI to parse through user description of an option strategy to plot an option payoff diagram chart.

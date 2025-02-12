@@ -1,6 +1,8 @@
+<p align="center">  
+<img src="https://github.com/Photon1c/PecuniaryScriptsLibrary/blob/main/inputs/logo.png?raw=true" alt="Logo"/>
+</p>  
+    
 # Pecuniary Scripts Library
-
-![Logo](/inputs/logo.png)
 
 A collection of financial scripts to speed up the process of batch processing input lists through screeners and visualizer output generators.
 
@@ -11,6 +13,7 @@ The sequence of steps that these scripts adhere to is as follows:
 -Update list with output from screening functions to generate charts.  
 
 Check back later as material for this project is released.
+
 
 ```mermaid
 stateDiagram-v2

@@ -21,8 +21,13 @@ Inputs --> Screeners
 Screeners --> Charts
 Charts --> Inputs
 ```  
+# Update 2.20.2025 - 🧠🌠⏲️
+
+The current project workflow is under development, check back for updates:
+
+![AI Stock Vision Flow](/inputs/aistockvision.png)
   
-# Update 2.19.2025 💻👁️📊
+# Update 2.19.2025 - 💻👁️📊
 
 The [Trading View - Chart Extractor](scripts/TradingView-ChartExtractor.ipynb) is a useful image saving script to collect stock charts that LLMs can use for vision analysis.  
 

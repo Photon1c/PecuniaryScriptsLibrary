@@ -27,3 +27,5 @@ ema_analyzer_silver_hawk.py generates a table indicating the EMA divergence of a
 advanced_screener_portfolio_manager.py sorts a list of stock tickers into 4 categories to determine actionability.
 
 OptionPayoff-AI-Creator.ipynb uses OpenAI to parse through user description of an option strategy to plot an option payoff diagram chart.
+
+TradingView-ChartExtractor.ipynb - Save TradingView stock charts as images using selenium. Useful for LLM vision analysis.

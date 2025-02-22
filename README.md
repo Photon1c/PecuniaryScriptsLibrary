@@ -20,7 +20,12 @@ stateDiagram-v2
 Inputs --> Screeners
 Screeners --> Charts
 Charts --> Inputs
-```  
+```
+
+# Update 2.22.25 -💹👀📓
+
+The [Option AI Payoff Diagram Generator](/inputs/OptionPayoff-AI-Creator.ipynb) is now available. Also, check out the [Stock Candle Wick Analyzers](https://github.com/Photon1c/StockCandleWickAnalyzers) repository for examples of the workflow mentioned on the 2.20.25 update.
+
 # Update 2.20.2025 - 🧠🌠⏲️
 
 The current project workflow is under development, check back for updates:

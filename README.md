@@ -21,6 +21,12 @@ Inputs --> Screeners
 Screeners --> Charts
 Charts --> Inputs
 ```
+<details>
+<summary>Updates</summary>  
+
+# Update 2.24.2025 - ✏️🗒📊
+
+The [Tangency Portfolio Advanced Report Generator](/scripts/TangencyPortfolio-Advanced-Analysis.py) is now available.  
 
 # Update 2.22.25 -💹👀📓
 
@@ -55,5 +61,5 @@ flowchart TD
     
     B -- No Significant Change --> K["Monitor and Re-evaluate Later"]
 ```
-
+</details>
 

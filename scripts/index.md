@@ -30,4 +30,6 @@ OptionPayoff-AI-Creator.ipynb uses OpenAI to parse through user description of a
 
 TradingView-ChartExtractor.ipynb - Save TradingView stock charts as images using selenium. Useful for LLM vision analysis.  
 
-sharpe_ratio_calculator.py - Calculates Sharpe ratio for stock ticker.s
+sharpe_ratio_calculator.py - Calculates Sharpe ratio for stock ticker.  
+
+refined_report_builders/ - New directory for more detailed report generators.

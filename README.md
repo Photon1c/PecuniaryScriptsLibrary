@@ -24,6 +24,10 @@ Charts --> Inputs
 <details>
 <summary>Updates</summary>  
 
+# Update 3.3.2025 - 💹
+
+A new tool, the [Metric Visualizer](/scripts/Financial-Metric-Visualizer.ipynb) is now available.  It computes the Sharpe Ratio, Annualized Return, and Volatility to then geneate a chart.
+
 # Update 2.24.2025 - ✏️🗒📊
 
 The [Tangency Portfolio Advanced Report Generator](/scripts/TangencyPortfolio-Advanced-Analysis.py) is now available.  

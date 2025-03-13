@@ -6,7 +6,7 @@
 
 A collection of financial scripts to speed up batch processing input lists through screeners and visualizer output generators.  
 
-⭐ Exhaustive 1K line script for LTSM Ensemble model released as a [notebook](scripts/refined_report_builders/lstm-ml-stock-predictions.ipynb) and [stand-alone script](scripts/refined_report_builders/LTSM-prediction-ensemble-chart-forecaster.py) now available.  
+⭐ Exhaustive 1K line script for LTSM Ensemble model released as a [notebook](scripts/refined_report_builders/lstm-ml-stock-predictions.ipynb) and [stand-alone script](scripts/refined_report_builders/LSTM-prediction-ensemble-chart-forecaster.py) now available.  
 
 The sequence of steps that these scripts adhere to is as follows:
 

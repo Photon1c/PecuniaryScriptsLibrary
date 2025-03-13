@@ -1,5 +1,5 @@
 #Uses CSV historical stock price data manually retrieved from Nasdaq.com
-#LSTM chart generator that predict range of stock price within next few days
+#LSTM chart generator that predicts range of stock price within next few days
 #Number of debugging runs: 95
 #Working, this script is a back-up
 #Results are suggested/intended to be fed into LLMs for analysis

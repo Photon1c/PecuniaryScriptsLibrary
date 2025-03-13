@@ -26,7 +26,7 @@ Charts --> Inputs
 
 # Update 3.12.25
 
-A powerful [Long short-term memory (LSTM) script](scripts/LSTM-prediction-ensemble-chart-forecaster.py) that calculates an ensemble of statistical measures in order to generate a chart with predictive ranges is now available. It is still being debugged,
+A powerful [Long short-term memory (LSTM) script](scripts/refined_report_builders/LSTM-prediction-ensemble-chart-forecaster.py) that calculates an ensemble of statistical measures in order to generate a chart with predictive ranges is now available. It is still being debugged,
 but it's powerful enough to warrant being backed up and shared for posterity ☄️ Enjoy!  
 
 # Update 3.3.2025 - 💹

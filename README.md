@@ -4,7 +4,9 @@
     
 # Pecuniary Scripts Library
 
-A collection of financial scripts to speed up batch processing input lists through screeners and visualizer output generators.
+A collection of financial scripts to speed up batch processing input lists through screeners and visualizer output generators.  
+
+⭐ Exhaustive 1,000 line script released as a [notebook](scripts/refined_report_builders/lstm-ml-stock-predictions.ipynb) and [stand-alone script](scripts/refined_report_builders/lstm=ml-stock-predictions.ipynb) are not available.  
 
 The sequence of steps that these scripts adhere to is as follows:
 

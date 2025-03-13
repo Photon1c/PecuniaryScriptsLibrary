@@ -513,7 +513,7 @@ def run_enhanced_stock_prediction_with_improvements(csv_path, seq_length=15, pre
     # Save best model for future use
     torch.save(best_model.state_dict(), 'best_stock_prediction_model.pth')
     
-    return best_model, predictions_df, df, ensemble_models
+    return best_model, predictions_df, df, ensemble_models, price_scaler
 def update_model_with_new_data(model, csv_path, new_data_csv=None, seq_length=15, prediction_days=3, batch_size=32, epochs=20):
     """
     Update the model with new market data as it becomes available.
@@ -818,6 +818,7 @@ def run_advanced_stock_prediction_pipeline(csv_path, optimize=True, ensemble=Tru
             csv_path, ensemble_size=5
         )
 
+
     else:
         print("\n=== Training Single Model ===")
         train_loader, val_loader, price_scaler, df, enhanced_df = prepare_enhanced_data(
@@ -866,16 +867,16 @@ def run_advanced_stock_prediction_pipeline(csv_path, optimize=True, ensemble=Tru
     # FIX HERE: Consistent return statement
     return best_model, predictions_df, df, ensemble_models, price_scaler
 
-
 # Example usage (Corrected unpacking to match function's returned values)
 if __name__ == "__main__":
-    csv_path = "stock_data.csv"
+    csv_path = "/kaggle/input/spyhpd/SPY.csv"
     
     model, predictions_df, df, ensemble_models, price_scaler = run_advanced_stock_prediction_pipeline(
         csv_path,
         optimize=True,
         ensemble=True,
-        backtest=True
+        backtest=True,
+        update_data=True
     )
     
     print("\nEnhanced prediction complete!")

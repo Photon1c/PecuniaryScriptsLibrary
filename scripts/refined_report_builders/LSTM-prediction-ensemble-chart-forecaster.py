@@ -875,8 +875,7 @@ if __name__ == "__main__":
         csv_path,
         optimize=True,
         ensemble=True,
-        backtest=True,
-        update_data=True
+        backtest=True
     )
     
     print("\nEnhanced prediction complete!")

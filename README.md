@@ -28,7 +28,7 @@ Charts --> Inputs
 
 # Update 3.18.25
 
-Comprehensive HTML [Report Maker](refined_report_builders/fin-report-nasdaq.ipynb) for stock data using Nasdaq historical data. Sample outout can be viewed [here](https://cheddarbutler.com/work/financialreports/stockreports/spy_03182025_report/). Kaggle is recommended to handle datasets like this one.
+Comprehensive HTML [Report Maker](scripts/refined_report_builders/fin-report-nasdaq.ipynb) for stock data using Nasdaq historical data. Sample outout can be viewed [here](https://cheddarbutler.com/work/financialreports/stockreports/spy_03182025_report/). Kaggle is recommended to handle datasets like this one.
 
 # Update 3.12.25
 

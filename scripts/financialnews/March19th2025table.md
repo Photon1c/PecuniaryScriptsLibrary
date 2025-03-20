@@ -1,4 +1,4 @@
-# The following trending financial news stories were compiled by QWEN-Max today, March 19th, 2025:  
+# The following trending financial news stories were compiled by QWEN2.5-Max today, March 19th, 2025:  
 | **Title**                                | **Summary**                                                                                     | **Source** |
 |------------------------------------------|-------------------------------------------------------------------------------------------------|------------|
 | Fed Signals Rate Cuts in 2025            | Stocks rose after the Federal Reserve indicated two rate cuts remain in its 2025 forecast.      | [[1]]      |

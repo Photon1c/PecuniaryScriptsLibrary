@@ -6,6 +6,8 @@
 
 A collection of financial scripts to speed up batch processing input lists through screeners and visualizer output generators.  
 
+💻 Programmatically generate option payoff diagrams and heat maps with the new [AI Powered Option Eagle](scripts/ai_powered_option_eagle.py) 🦅 
+
 ⭐ Exhaustive script for LTSM Ensemble model released as a [notebook](scripts/refined_report_builders/lstm-ml-stock-predictions.ipynb) and [stand-alone script](scripts/refined_report_builders/LSTM-prediction-ensemble-chart-forecaster.py) now available.  
 
 The sequence of steps that these scripts adhere to is as follows:
@@ -25,6 +27,10 @@ Charts --> Inputs
 ```
 <details>
 <summary>Updates</summary>  
+
+# Update 3.22.2025  
+
+New [AI Powered Option Eagle](scripts/ai_powered_option_eagle.py) 🦅 is useful to visualize multi-leg strategies and identify points of interests for stocks.  
 
 # Update 3.18.25
 

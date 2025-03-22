@@ -1,4 +1,4 @@
-# Option Modeling Predictive Paremeters - Deep Seek Research Report 03.21.2025  
+# Option Modeling Predictive Parameters - Deep Seek Research Report 03.21.2025  
 | **Feature**               | **Description**                                                                 | **Application in Predictive Algorithms**                                                                 |
 |---------------------------|---------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------|
 | **Underlying Price (S)**   | Current price of the underlying asset (e.g., stock, index).                     | Core input for pricing models (e.g., Black-Scholes) and predicting directional trends.                   |

@@ -1,3 +1,5 @@
+# Historical Tariff Resilience 
+
 | Industry                | Resilience Factors                                                                 | Example Stock Tickers               |
 |-------------------------|-----------------------------------------------------------------------------------|-------------------------------------|
 | Utilities               | Domestic-focused, regulated monopolies, stable demand regardless of economic cycles. | NEE, DUK, SO                        |

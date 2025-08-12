@@ -1,5 +1,5 @@
 <p align="center">  
-<img src="https://github.com/Photon1c/PecuniaryScriptsLibrary/blob/main/inputs/logo.png?raw=true" alt="Logo"/>
+<img src="https://github.com/Photon1c/PecuniaryScriptsLibrary/blob/main/inputs/logo.png?raw=true" alt="Logo"/ width="100" height="100">
 </p>  
     
 # Pecuniary Scripts Library

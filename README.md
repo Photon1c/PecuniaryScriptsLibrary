@@ -6,7 +6,7 @@
 
 A collection of financial scripts to speed up batch processing input lists through screeners and visualizer output generators.  
 
-![Cursor](https://cdn-1.webcatalog.io/catalog/cursor-web/cursor-web-icon-filled-256.webp?v=1752559562861) This repository is now maintained by Cursor and Cloudfare Agents 🤖.
+![Cursor](https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ18A9mlKIzlij_O5U59P_xivyjup2uGgb6IA&s) This repository is now maintained by Cursor and Cloudfare Agents 🤖.
 
 ⏰🧭🏁Major Update Notice - 8.11.25 - DOM Visualizer now available.
 

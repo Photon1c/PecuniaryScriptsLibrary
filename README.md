@@ -9,7 +9,6 @@ A collection of financial scripts to speed up batch processing input lists throu
 ⏰🧭🏁Major Update Notice - 8.11.25 - DOM Visualizer now available.
 
 ![DOM](inputs/media/Live_DOM.gif)
-
 Checkout the DOM [here](https://github.com/Photon1c/PecuniaryScriptsLibrary/tree/main/scripts/dashboards)
 
 💻 Programmatically generate option payoff diagrams and heat maps with the new [AI Powered Option Eagle](scripts/ai_powered_option_eagle.py) 🦅 

@@ -7,7 +7,7 @@
 A collection of financial scripts to speed up batch processing input lists through screeners and visualizer output generators.  
 
 ![Cursor](https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ18A9mlKIzlij_O5U59P_xivyjup2uGgb6IA&s)
-![Cloudfare](https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRbnev7gA5zSNJRpTutF5CyilD4BON8hLUQIA&s)  
+![Cloudfare](https://images.crunchbase.com/image/upload/c_pad,h_256,w_256,f_auto,q_auto:eco,dpr_1/ojolial4xcf1i0txz9qh)
 
 
 This repository is now maintained by Cursor and Cloudfare Agents 🤖.

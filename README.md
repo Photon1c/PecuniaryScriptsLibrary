@@ -6,6 +6,12 @@
 
 A collection of financial scripts to speed up batch processing input lists through screeners and visualizer output generators.  
 
+⏰🧭🏁Major Update Notice - 8.11.25 - DOM Visualizer now available.
+
+![DOM](inputs/media/Live_DOM.gif)
+
+Checkout the DOM [here](https://github.com/Photon1c/PecuniaryScriptsLibrary/tree/main/scripts/dashboards)
+
 💻 Programmatically generate option payoff diagrams and heat maps with the new [AI Powered Option Eagle](scripts/ai_powered_option_eagle.py) 🦅 
 
 ⭐ Exhaustive script for LTSM Ensemble model released as a [notebook](scripts/refined_report_builders/lstm-ml-stock-predictions.ipynb) and [stand-alone script](scripts/refined_report_builders/LSTM-prediction-ensemble-chart-forecaster.py) now available.  

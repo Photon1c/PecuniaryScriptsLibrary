@@ -1,0 +1,5 @@
+#run live dash
+python metascripts/DOM_analysis/DOM_analyzer_dash_v3.py --default-ticker SPY --poll-interval 0.5 --port 8021 --headless
+
+#run with historical backtest
+python metascripts/DOM_analysis/DOM_analyzer_dash_v3.py --replay-latest --replay-dir metascripts/DOM_analysis/data --poll-interval 0.05 --port 8021

@@ -1,0 +1,159 @@
+[0] Visible: False, Loc: {'x': 243, 'y': 4432}, Size: {'height': 24, 'width': 4}
+     OuterHTML: <input class="ReactSelect__input" autocapitalize="none" autocomplete="off" autocorrect="off" id="sel...
+     Parent Text:
+
+[1] Visible: True, Loc: {'x': 245, 'y': 1684}, Size: {'height': 19, 'width': 150}
+     OuterHTML: <input type="search" id="symbol0" name="symbol" value="OPEN">...
+     Parent Text:
+
+[2] Visible: True, Loc: {'x': 379, 'y': 1687}, Size: {'height': 13, 'width': 11}
+     OuterHTML: <input type="submit" value="" id="symbol-search-0" title="click here to search">...
+     Parent Text:
+
+[3] Visible: True, Loc: {'x': 444, 'y': 3287}, Size: {'height': 36, 'width': 300}
+     OuterHTML: <input name="first_name" required="" width="300px" id="textInput_1" type="text" class="TextInput__St...
+     Parent Text:
+
+[4] Visible: True, Loc: {'x': 760, 'y': 3287}, Size: {'height': 36, 'width': 300}
+     OuterHTML: <input name="last_name" required="" width="300px" id="textInput_2" type="text" class="TextInput__Sty...
+     Parent Text:
+
+[5] Visible: True, Loc: {'x': 444, 'y': 3361}, Size: {'height': 36, 'width': 300}
+     OuterHTML: <input name="company" required="" width="300px" id="textInput_3" type="text" class="TextInput__Style...
+     Parent Text:
+
+[6] Visible: True, Loc: {'x': 760, 'y': 3361}, Size: {'height': 36, 'width': 300}
+     OuterHTML: <input name="email" required="" width="300px" id="emailInput_4" type="email" class="EmailInput__Styl...
+     Parent Text:
+
+[7] Visible: True, Loc: {'x': 454, 'y': 3441}, Size: {'height': 24, 'width': 4}
+     OuterHTML: <input class="ReactSelect__input" autocapitalize="none" autocomplete="off" autocorrect="off" id="sel...
+     Parent Text:
+
+[8] Visible: False, Loc: {'x': 444, 'y': 3450}, Size: {'height': 21, 'width': 300}
+     OuterHTML: <input required="" name="customer_type" tabindex="-1" aria-hidden="true" class="css-1a0ro4n-required...
+     Parent Text: Select...
+
+[9] Visible: True, Loc: {'x': 760, 'y': 3435}, Size: {'height': 36, 'width': 300}
+     OuterHTML: <input name="phone" required="" width="300px" maxlength="50" id="textInput_6" type="text" class="Tex...
+     Parent Text:
+
+[10] Visible: True, Loc: {'x': 444, 'y': 3533}, Size: {'height': 13, 'width': 13}
+     OuterHTML: <input type="checkbox" name="service" value="U.S. Equities">...
+     Parent Text: U.S. Equities
+
+[11] Visible: True, Loc: {'x': 568, 'y': 3533}, Size: {'height': 13, 'width': 13}
+     OuterHTML: <input type="checkbox" name="service" value="U.S. Options">...
+     Parent Text: U.S. Options
+
+[12] Visible: True, Loc: {'x': 693, 'y': 3533}, Size: {'height': 13, 'width': 13}
+     OuterHTML: <input type="checkbox" name="service" value="U.S. Futures">...
+     Parent Text: U.S. Futures
+
+[13] Visible: True, Loc: {'x': 815, 'y': 3533}, Size: {'height': 13, 'width': 13}
+     OuterHTML: <input type="checkbox" name="service" value="European Equities">...
+     Parent Text: European Equities
+
+[14] Visible: True, Loc: {'x': 978, 'y': 3533}, Size: {'height': 13, 'width': 13}
+     OuterHTML: <input type="checkbox" name="service" value="Indices">...
+     Parent Text: Indices
+
+[15] Visible: True, Loc: {'x': 444, 'y': 3571}, Size: {'height': 13, 'width': 13}
+     OuterHTML: <input type="checkbox" name="service" value="FX">...
+     Parent Text: FX
+
+[16] Visible: True, Loc: {'x': 503, 'y': 3571}, Size: {'height': 13, 'width': 13}
+     OuterHTML: <input type="checkbox" name="service" value="European Derivatives">...
+     Parent Text: European Derivatives
+
+[17] Visible: True, Loc: {'x': 686, 'y': 3571}, Size: {'height': 13, 'width': 13}
+     OuterHTML: <input type="checkbox" name="service" value="Crypto">...
+     Parent Text: Crypto
+
+[18] Visible: True, Loc: {'x': 773, 'y': 3571}, Size: {'height': 13, 'width': 13}
+     OuterHTML: <input type="checkbox" name="service" value="Japanese Equities">...
+     Parent Text: Japanese Equities
+
+[19] Visible: True, Loc: {'x': 444, 'y': 3609}, Size: {'height': 13, 'width': 13}
+     OuterHTML: <input type="checkbox" name="service" value="Australian Equities">...
+     Parent Text: Australian Equities
+
+[20] Visible: True, Loc: {'x': 609, 'y': 3609}, Size: {'height': 13, 'width': 13}
+     OuterHTML: <input type="checkbox" name="service" value="Canadian Equities">...
+     Parent Text: Canadian Equities
+
+[21] Visible: True, Loc: {'x': 444, 'y': 3685}, Size: {'height': 13, 'width': 13}
+     OuterHTML: <input type="checkbox" name="regions" value="APAC">...
+     Parent Text: APAC
+
+[22] Visible: True, Loc: {'x': 523, 'y': 3685}, Size: {'height': 13, 'width': 13}
+     OuterHTML: <input type="checkbox" name="regions" value="EMEA">...
+     Parent Text: EMEA
+
+[23] Visible: True, Loc: {'x': 604, 'y': 3685}, Size: {'height': 13, 'width': 13}
+     OuterHTML: <input type="checkbox" name="regions" value="North America">...
+     Parent Text: North America
+
+[24] Visible: True, Loc: {'x': 444, 'y': 3939}, Size: {'height': 13, 'width': 13}
+     OuterHTML: <input type="checkbox" name="express_consent" value="true">...
+     Parent Text: YES, I acknowledge that Cboe may contact me about Cboe activities, products, and services. I underst
+
+[25] Visible: True, Loc: {'x': 444, 'y': 3991}, Size: {'height': 13, 'width': 13}
+     OuterHTML: <input type="checkbox" name="privacy_policy" value="true">...
+     Parent Text: YES, I agree to the Terms and Conditions ( https://www.cboe.com/terms/ ) for use of Cboe websites. I
+
+[26] Visible: False, Loc: {'x': 0, 'y': 4402}, Size: {'height': 0, 'width': 0}
+     OuterHTML: <input name="lasttouch_utm_campaign_id" type="hidden" class="HiddenInput__StyledHiddenInput-cui__sc-...
+     Parent Text: FIRST NAME * LAST NAME * COMPANY NAME * EMAIL ADDRESS * MARKET PARTICIPANT TYPE * Select... PHONE *
+
+[27] Visible: False, Loc: {'x': 0, 'y': 4402}, Size: {'height': 0, 'width': 0}
+     OuterHTML: <input name="utm_campaign" type="hidden" class="HiddenInput__StyledHiddenInput-cui__sc-2qn3ex-0 bHIg...
+     Parent Text: FIRST NAME * LAST NAME * COMPANY NAME * EMAIL ADDRESS * MARKET PARTICIPANT TYPE * Select... PHONE *
+
+[28] Visible: False, Loc: {'x': 0, 'y': 4402}, Size: {'height': 0, 'width': 0}
+     OuterHTML: <input name="utm_medium" type="hidden" class="HiddenInput__StyledHiddenInput-cui__sc-2qn3ex-0 bHIgOP...
+     Parent Text: FIRST NAME * LAST NAME * COMPANY NAME * EMAIL ADDRESS * MARKET PARTICIPANT TYPE * Select... PHONE *
+
+[29] Visible: False, Loc: {'x': 0, 'y': 4402}, Size: {'height': 0, 'width': 0}
+     OuterHTML: <input name="utm_source" type="hidden" class="HiddenInput__StyledHiddenInput-cui__sc-2qn3ex-0 bHIgOP...
+     Parent Text: FIRST NAME * LAST NAME * COMPANY NAME * EMAIL ADDRESS * MARKET PARTICIPANT TYPE * Select... PHONE *
+
+[30] Visible: False, Loc: {'x': 0, 'y': 4402}, Size: {'height': 0, 'width': 0}
+     OuterHTML: <input name="utm_content" type="hidden" class="HiddenInput__StyledHiddenInput-cui__sc-2qn3ex-0 bHIgO...
+     Parent Text: FIRST NAME * LAST NAME * COMPANY NAME * EMAIL ADDRESS * MARKET PARTICIPANT TYPE * Select... PHONE *
+
+[31] Visible: False, Loc: {'x': 0, 'y': 4402}, Size: {'height': 0, 'width': 0}
+     OuterHTML: <input name="utm_term" type="hidden" class="HiddenInput__StyledHiddenInput-cui__sc-2qn3ex-0 bHIgOP" ...
+     Parent Text: FIRST NAME * LAST NAME * COMPANY NAME * EMAIL ADDRESS * MARKET PARTICIPANT TYPE * Select... PHONE *
+
+[32] Visible: False, Loc: {'x': 0, 'y': 4402}, Size: {'height': 0, 'width': 0}
+     OuterHTML: <input type="checkbox" name="ot-group-id-C0003" id="ot-group-id-C0003" role="switch" class="category...
+     Parent Text:
+
+[33] Visible: False, Loc: {'x': 0, 'y': 4402}, Size: {'height': 0, 'width': 0}
+     OuterHTML: <input type="checkbox" name="ot-group-id-C0002" id="ot-group-id-C0002" role="switch" class="category...
+     Parent Text:
+
+[34] Visible: False, Loc: {'x': 0, 'y': 4402}, Size: {'height': 0, 'width': 0}
+     OuterHTML: <input type="checkbox" name="ot-group-id-C0004" id="ot-group-id-C0004" role="switch" class="category...
+     Parent Text:
+
+[35] Visible: False, Loc: {'x': 0, 'y': 4402}, Size: {'height': 0, 'width': 0}
+     OuterHTML: <input id="vendor-search-handler" type="text" name="vendor-search-handler" placeholder="Search…" ari...
+     Parent Text:
+
+[36] Visible: False, Loc: {'x': 0, 'y': 4402}, Size: {'height': 0, 'width': 0}
+     OuterHTML: <input id="select-all-hosts-groups-handler" type="checkbox">...
+     Parent Text:
+
+[37] Visible: False, Loc: {'x': 0, 'y': 4402}, Size: {'height': 0, 'width': 0}
+     OuterHTML: <input id="select-all-vendor-groups-handler" type="checkbox">...
+     Parent Text:
+
+[38] Visible: False, Loc: {'x': 0, 'y': 4402}, Size: {'height': 0, 'width': 0}
+     OuterHTML: <input id="select-all-vendor-leg-handler" type="checkbox">...
+     Parent Text:
+
+[39] Visible: False, Loc: {'x': 0, 'y': 4402}, Size: {'height': 0, 'width': 0}
+     OuterHTML: <input id="chkbox-id" type="checkbox" class="category-filter-handler">...
+     Parent Text:

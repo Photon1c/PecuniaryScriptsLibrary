@@ -1,14 +1,36 @@
 """
-Live DOM Dashboard v3: Adds Option Pricing API, Regime Toggle, and Thermodynamic Map
+Live DOM Dashboard v3
+---------------------
 
-Instructions:
-- Install dependencies:
+What this provides
+- Live Cboe DOM scrape (bid/ask depth + last trade) with a pixel heatmap
+- Bubble overlay for instantaneous depth (green=bid, red=ask)
+- Axis-integrated, time–decayed bid/ask bars for per-price accumulation
+- Thermo map (flip/walls/spot + simple BS pricing and greeks)
+
+Install
     pip install flask selenium webdriver-manager scipy
 
-- Run:
-    python metascripts/DOM_analysis/DOM_analyzer_dash_v3.py --default-ticker SPY --poll-interval 1 --port 8021 --headless
+Usage
+- Live (headless):
+    python metascripts/DOM_analysis/DOM_analyzer_dash_v3.py --default-ticker SPY --poll-interval 0.5 --port 8021 --headless
 
-- Open in browser:
+- Replay newest CSV in a directory:
+    python metascripts/DOM_analysis/DOM_analyzer_dash_v3.py --replay-latest --replay-dir metascripts/DOM_analysis/data --poll-interval 0.05 --port 8021
+
+Key flags
+- --default-ticker        Default symbol (e.g., SPY)
+- --poll-interval         Seconds between polls; supports fractional values
+- --host/--port           Bind address/port (use 0.0.0.0 to expose on LAN)
+- --headless              Run Chrome in headless mode
+- --replay-latest/--replay-file  Backtest from CSV instead of live scrape
+
+UI notes
+- Bubbles drift right→left over time; newest column is at the far right
+- Right axis shows integrated green/red bars aligned to price labels
+- Thermo flip/put/call default to near-spot when inputs left blank/"auto"
+
+Open in browser
     http://127.0.0.1:8021
 """
 

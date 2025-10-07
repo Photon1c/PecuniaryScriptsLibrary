@@ -505,6 +505,13 @@ def create_app(default_ticker: str = "SPY",
     #priceChartCanvas { z-index: 3; pointer-events: none; background: transparent; }
     canvas {{ display: block; width: 100%; height: 100%; image-rendering: pixelated; }}
     .row2 { display: grid; grid-template-columns: 1fr; gap: 10px; align-items: stretch; position: relative; z-index: 1; min-height: 360px; }
+
+    /* help modal */
+    #helpModal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 50; }
+    #helpModal .card { max-width: 900px; margin: 6vh auto; background: #0e1730; border: 1px solid #1f2a44; border-radius: 10px; padding: 16px; color: #e6edf3; }
+    #helpModal h2 { margin: 0 0 8px 0; font-size: 16px; }
+    #helpModal p  { margin: 6px 0; color: #c7d2e0; }
+    #helpClose { float: right; cursor: pointer; color: #9fb0d4; }
   </style>
   </head>
   <body>
@@ -560,6 +567,19 @@ def create_app(default_ticker: str = "SPY",
     </main>
 
     <script>
+  // basic key handler + console diagnostics
+  (function(){
+    const modal = document.getElementById('helpModal');
+    const closer = document.getElementById('helpClose');
+    function showHelp(show){ modal.style.display = show ? 'block' : 'none'; }
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'i' || e.key === 'I') { e.preventDefault(); showHelp(modal.style.display !== 'block'); }
+      if (e.key === 'Escape') showHelp(false);
+    });
+    closer && closer.addEventListener('click', () => showHelp(false));
+  })();
+  // console diagnostics toggles
+  const DEBUG = true;
       const statusEl = document.getElementById('status');
       const tickerEl = document.getElementById('ticker');
       const applyEl = document.getElementById('apply');
@@ -571,7 +591,8 @@ def create_app(default_ticker: str = "SPY",
       const priceChartCanvas = document.getElementById('priceChartCanvas');
       const priceChartCtx = priceChartCanvas.getContext('2d');
       // Custom price trace aligned to heatmap/bubbles (no Chart.js)
-      function drawPriceTrace(last) {
+  function drawPriceTrace(last) {
+    if (DEBUG) console.debug('priceTrace last=', last);
         const H = priceChartCanvas.height|0;
         const usableW = priceChartCanvas.width - AXIS_RIGHT_PAD; // avoid drawing in axis band
         // shift left by 1 px within usable area
@@ -674,7 +695,8 @@ def create_app(default_ticker: str = "SPY",
         syncSidebarHeights();
       });
 
-      function updatePriceRange(last, bids, asks) {
+  function updatePriceRange(last, bids, asks) {
+    if (DEBUG) console.debug('updateRange last=', last, 'bids=', bids.length, 'asks=', asks.length);
         const prices = [];
         if (typeof last === 'number') prices.push(last);
         bids.forEach(([p,_]) => { if (typeof p === 'number') prices.push(p); });
@@ -722,7 +744,8 @@ def create_app(default_ticker: str = "SPY",
         return Math.max(2, Math.round(3 + 12 * f));
       }
 
-      function drawHeatmapColumn(bids, asks, last) {
+  function drawHeatmapColumn(bids, asks, last) {
+    if (DEBUG) console.debug('drawHeatmap bids/asks=', bids.length, asks.length, 'last=', last);
         // shift only the plot area (exclude the right axis band) by 1 px left
         const plotW = Math.max(1, heatmapCanvas.width - AXIS_RIGHT_PAD);
         const H = heatmapCanvas.height;
@@ -1030,13 +1053,16 @@ def create_app(default_ticker: str = "SPY",
         return body.data;
       }
 
-      async function poll() {
+  async function poll() {
         try {
           statusEl.textContent = 'Updating…';
-          const res = await fetch(`/api/depth?ticker=${encodeURIComponent(currentTicker)}&levels=15`, { cache: 'no-store' });
+      const urlDepth = `/api/depth?ticker=${encodeURIComponent(currentTicker)}&levels=15`;
+      if (DEBUG) console.debug('fetch depth', urlDepth);
+      const res = await fetch(urlDepth, { cache: 'no-store' });
           const body = await res.json();
           if (!body.ok) throw new Error(body.error || 'Fetch failed');
           const d = body.data;
+      if (DEBUG) console.debug('depth resp', d);
           const last = typeof d.last_price === 'number' ? d.last_price : null;
           const bids = (d.bids || []).filter(([p,_]) => typeof p === 'number');
           const asks = (d.asks || []).filter(([p,_]) => typeof p === 'number');
@@ -1050,12 +1076,13 @@ def create_app(default_ticker: str = "SPY",
           // price trace is drawn on heatmap; no separate chart
 
           // NEW: live option calc and thermo redraw
-          try {
-          const opt = await priceAndOption(currentTicker);
-          drawThermo(opt.spot, opt.flip, opt.put_wall, opt.call_wall, opt.regime, opt.option);
-          } catch (e) {
-            console.error('Thermo fetch error', e);
-          }
+      try {
+        const opt = await priceAndOption(currentTicker);
+        if (DEBUG) console.debug('option resp', opt);
+        drawThermo(opt.spot, opt.flip, opt.put_wall, opt.call_wall, opt.regime, opt.option);
+      } catch (e) {
+        console.error('Thermo fetch error', e);
+      }
 
           statusEl.innerHTML = '<span style="color:#22c55e">Live</span>';
         } catch (err) {
@@ -1069,6 +1096,17 @@ def create_app(default_ticker: str = "SPY",
       // Kick one immediate poll to draw first frame
       poll();
     </script>
+    <!-- quick help modal → toggle with the 'i' key -->
+    <div id="helpModal">
+      <div class="card">
+        <div id="helpClose">[esc/×]</div>
+        <h2>Instructions</h2>
+        <p><b>Bubbles</b>: Green=bid depth, Red=ask depth. Size≈order size (log scaled). Right edge is “now”; bubbles drift left over time.</p>
+        <p><b>Right axis bars</b>: Green/Red bars are time-decayed accumulation of depth per price, aligned to labels.</p>
+        <p><b>Thermo</b>: Dark vertical is <b>spot</b>. Green <b>PUT</b> and red <b>CALL</b> walls show your anchors. Flip is dashed line. Leave Flip/Put/Call blank to auto-anchor near spot.</p>
+        <p><b>Keys</b>: Press <b>i</b> to toggle this help. Use the ticker box + Apply to change symbols.</p>
+      </div>
+    </div>
   </body>
   </html>
         """
@@ -1236,4 +1274,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

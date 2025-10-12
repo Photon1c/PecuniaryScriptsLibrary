@@ -1,0 +1,5 @@
+{
+  "stock_data_path": "F:/inputs/stocks/",
+  "option_data_path": "F:/inputs/options/log",
+  "tickers": ["SPY"]
+}

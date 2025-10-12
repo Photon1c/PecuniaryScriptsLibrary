@@ -1,0 +1,301 @@
+[
+  {
+    "id": "MKT_SPY",
+    "mode": "market",
+    "symbol": "SPY",
+    "origin": "UNKNOWN",
+    "destination": "UNKNOWN",
+    "price": 100.7597509205873,
+    "altitude": 1007.5975092058729,
+    "velocity": 100.0,
+    "heading": 0.0,
+    "phase": "Cruise",
+    "position": {},
+    "telemetry": [
+      {
+        "tick": 0,
+        "altitude": 988.4086028448746,
+        "velocity": 100.0,
+        "phase": "Cruise",
+        "status_flags": {
+          "stall": false,
+          "turbulence": false
+        },
+        "price": 98.84086028448746
+      },
+      {
+        "tick": 1,
+        "altitude": 981.7542842086381,
+        "velocity": 100.0,
+        "phase": "Cruise",
+        "status_flags": {
+          "stall": false,
+          "turbulence": false
+        },
+        "price": 98.17542842086381
+      },
+      {
+        "tick": 2,
+        "altitude": 991.7201209164756,
+        "velocity": 100.0,
+        "phase": "Cruise",
+        "status_flags": {
+          "stall": false,
+          "turbulence": false
+        },
+        "price": 99.17201209164756
+      },
+      {
+        "tick": 3,
+        "altitude": 1001.1711321183553,
+        "velocity": 100.0,
+        "phase": "Cruise",
+        "status_flags": {
+          "stall": false,
+          "turbulence": false
+        },
+        "price": 100.11711321183553
+      },
+      {
+        "tick": 4,
+        "altitude": 1007.5975092058729,
+        "velocity": 100.0,
+        "phase": "Cruise",
+        "status_flags": {
+          "stall": false,
+          "turbulence": false
+        },
+        "price": 100.7597509205873
+      }
+    ],
+    "status_flags": {
+      "stall": false,
+      "turbulence": false
+    },
+    "tick": 5
+  },
+  {
+    "id": "MKT_QQQ",
+    "mode": "market",
+    "symbol": "QQQ",
+    "origin": "UNKNOWN",
+    "destination": "UNKNOWN",
+    "price": 108.17619591645197,
+    "altitude": 1081.7619591645198,
+    "velocity": 100.0,
+    "heading": 0.0,
+    "phase": "Cruise",
+    "position": {},
+    "telemetry": [
+      {
+        "tick": 0,
+        "altitude": 1089.8827846330298,
+        "velocity": 100.0,
+        "phase": "Cruise",
+        "status_flags": {
+          "stall": false,
+          "turbulence": false
+        },
+        "price": 108.98827846330299
+      },
+      {
+        "tick": 1,
+        "altitude": 1092.2235992531423,
+        "velocity": 100.0,
+        "phase": "Cruise",
+        "status_flags": {
+          "stall": false,
+          "turbulence": false
+        },
+        "price": 109.22235992531424
+      },
+      {
+        "tick": 2,
+        "altitude": 1083.7015495535888,
+        "velocity": 100.0,
+        "phase": "Cruise",
+        "status_flags": {
+          "stall": false,
+          "turbulence": false
+        },
+        "price": 108.37015495535888
+      },
+      {
+        "tick": 3,
+        "altitude": 1079.9495602530778,
+        "velocity": 100.0,
+        "phase": "Cruise",
+        "status_flags": {
+          "stall": false,
+          "turbulence": false
+        },
+        "price": 107.99495602530779
+      },
+      {
+        "tick": 4,
+        "altitude": 1081.7619591645198,
+        "velocity": 100.0,
+        "phase": "Cruise",
+        "status_flags": {
+          "stall": false,
+          "turbulence": false
+        },
+        "price": 108.17619591645197
+      }
+    ],
+    "status_flags": {
+      "stall": false,
+      "turbulence": false
+    },
+    "tick": 5
+  },
+  {
+    "id": "AC001",
+    "mode": "aircraft",
+    "symbol": null,
+    "origin": "KSEA",
+    "destination": "KPDX",
+    "price": 0.0,
+    "altitude": 3500.0,
+    "velocity": 250.0,
+    "heading": 0.0,
+    "phase": "Climb",
+    "position": {},
+    "telemetry": [
+      {
+        "tick": 0,
+        "altitude": 1500.0,
+        "velocity": 250.0,
+        "phase": "Climb",
+        "status_flags": {
+          "stall": false,
+          "turbulence": false
+        },
+        "price": 0.0
+      },
+      {
+        "tick": 1,
+        "altitude": 2000.0,
+        "velocity": 250.0,
+        "phase": "Climb",
+        "status_flags": {
+          "stall": false,
+          "turbulence": false
+        },
+        "price": 0.0
+      },
+      {
+        "tick": 2,
+        "altitude": 2500.0,
+        "velocity": 250.0,
+        "phase": "Climb",
+        "status_flags": {
+          "stall": false,
+          "turbulence": false
+        },
+        "price": 0.0
+      },
+      {
+        "tick": 3,
+        "altitude": 3000.0,
+        "velocity": 250.0,
+        "phase": "Climb",
+        "status_flags": {
+          "stall": false,
+          "turbulence": false
+        },
+        "price": 0.0
+      },
+      {
+        "tick": 4,
+        "altitude": 3500.0,
+        "velocity": 250.0,
+        "phase": "Climb",
+        "status_flags": {
+          "stall": false,
+          "turbulence": false
+        },
+        "price": 0.0
+      }
+    ],
+    "status_flags": {
+      "stall": false,
+      "turbulence": false
+    }
+  },
+  {
+    "id": "TRF_PNW_1",
+    "mode": "traffic",
+    "symbol": null,
+    "origin": "PNW",
+    "destination": "KSEA",
+    "price": 0.0,
+    "altitude": 0.0,
+    "velocity": 20.0,
+    "heading": 0.0,
+    "phase": "Taxi",
+    "position": {},
+    "telemetry": [
+      {
+        "tick": 0,
+        "altitude": 0.0,
+        "velocity": 20.0,
+        "phase": "Taxi",
+        "status_flags": {
+          "stall": false,
+          "turbulence": false
+        },
+        "price": 0.0
+      },
+      {
+        "tick": 1,
+        "altitude": 0.0,
+        "velocity": 20.0,
+        "phase": "Taxi",
+        "status_flags": {
+          "stall": false,
+          "turbulence": false
+        },
+        "price": 0.0
+      },
+      {
+        "tick": 2,
+        "altitude": 0.0,
+        "velocity": 20.0,
+        "phase": "Taxi",
+        "status_flags": {
+          "stall": false,
+          "turbulence": false
+        },
+        "price": 0.0
+      },
+      {
+        "tick": 3,
+        "altitude": 0.0,
+        "velocity": 20.0,
+        "phase": "GoAround",
+        "status_flags": {
+          "stall": false,
+          "turbulence": false
+        },
+        "price": 0.0
+      },
+      {
+        "tick": 4,
+        "altitude": 0.0,
+        "velocity": 20.0,
+        "phase": "Taxi",
+        "status_flags": {
+          "stall": false,
+          "turbulence": false
+        },
+        "price": 0.0
+      }
+    ],
+    "status_flags": {
+      "stall": false,
+      "turbulence": false
+    },
+    "tick": 5
+  }
+]

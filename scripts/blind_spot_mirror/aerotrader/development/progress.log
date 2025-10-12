@@ -1,0 +1,110 @@
+Version: 0.2.0
+
+### 🔄 [2024-06-27] CLI & Log Export Enhancements
+
+- 🧾 `blackbox.py`: Modularized log writing; now supports both markdown and JSON export. All logs are written with UTF-8 encoding for emoji and special character compatibility on all platforms.
+  _Effect: No more UnicodeEncodeError on Windows; logs can include emojis and non-ASCII characters._
+- 🖥️ `flight_sim_engine.py`: Added `--ticker`, `--date`, and `--log-format` CLI arguments for flexible simulation and log output. Output file extension now matches the selected format.
+  _Effect: Users can simulate any ticker/date and choose between markdown or JSON logs from the command line._
+- 📚 `README.md`: Updated documentation to reflect new CLI options, log formats, and Unicode compatibility.
+
+---
+
+**Output Cues:**
+- Example: `python flight_sim_engine.py --ticker NVDA --mode intraday --date 2024-06-20 --log-format json` now produces a valid JSON log with emoji support.
+- Example: No more UnicodeEncodeError when writing logs with emojis on Windows.
+
+---
+
+**Next:**  
+- Modularize `blackbox.py` further to support additional export formats if needed.
+- Add more CLI options for advanced simulation control.
+
+**Ref:** <#roadmap or issue-id>
+
+---
+
+Version: 0.2.1
+
+### 🔄 [2024-06-27] Module Logic Updates
+
+- ✈️ `turbulence_sensor.py`: Combines IV delta and candle shape to classify turbulence more realistically (`Calm`, `Moderate`, `Heavy`).  
+  _Effect: Turbulence rating for 06/27 now reads Heavy due to IV ramp + doji pattern._
+- 🪂 `stall_detector.py`: Flags EMA drag, IV spikes, and upper wick drag in uptrends for better stall detection.  
+  _Effect: New stall logic now correctly flags 06/25/2025 candle as "Stall" instead of "Thrust"._
+- 🧠 `flight_sim_engine.py`: Integrated verbose mode, plugged in new stall/turbulence logic for easier debugging and validation.
+- 📜 Created this log file to track iterative development.
+
+### 📝 [2024-06-27] Documentation Update
+
+- 📚 `README.md`: Added a section explaining the meaning of each candle phase (Thrust, Go-around, Hover, Stall) as used in the simulation logs. This helps users interpret the log output and understand the market metaphors.
+
+### 🛠️ [2025-06-29] Major Refactor & Workflow Improvements
+
+- 🗂️ All core simulation logic moved to `modular/core/` for better organization and maintainability.
+- 🚪 Introduced `modular/entry.py` as the single entry point for running simulations. All CLI arguments are now passed through entry.py.
+- 📁 All log output is now saved to `modular/logs/` for a clean and consistent workspace.
+- 🔄 Refactored `flight_sim_engine.py` for strict mode consistency: daily and intraday logic and outputs are now fully separated.
+- 📝 Updated README to reflect the new structure, usage, and removed obsolete instructions.
+
+---
+
+**Next:**
+- Further modularize reporting and utility scripts.
+- Add more advanced CLI options and batch processing support.
+
+**Ref:** <#modularization, #entry-point, #logs-directory, #mode-consistency>
+
+Version: 0.3.0
+
+### 🔄 [2024-06-29] FlightOps Orchestrator Scaffold & Simulation Refinement Suggestions
+
+- 🧩 `flight_ops_core.py`: Scaffolded a unified orchestrator for market, aircraft, and traffic simulation domains. Introduced the `FlightState` dataclass and `FlightOpsCore` class, with mock logic for each domain and a runnable test harness.
+  _Effect: Enables multi-domain simulation with a shared state schema, providing a foundation for future integration and experimentation._
+- 🧪 `flight_ops_core.py`: Added a minimal test run with 2–3 flights (one per domain) and simple oscillating/linear logic for each.
+  _Effect: Demonstrates the orchestrator's update loop and state transitions for each domain._
+
+---
+
+**Output Cues:**
+- Example: Initial test run prints each flight's state per tick, showing market price oscillation, aircraft climb, and traffic taxiing.
+- Example: All status flags remain `False` with current logic; no stalls or turbulence are triggered.
+
+---
+
+**Next:**  
+- Refine domain logic for realism (e.g., random walk for market, full flight phases, traffic congestion).
+- Add interactions between domains (e.g., market stall triggers flight stall).
+- Improve output: log to file, add telemetry/history, and visualize results.
+- Parameterize simulation (tick count, randomness, initial conditions).
+- Expand status flags and event tracking for richer simulation.
+
+**Ref:** <#flight-ops-orchestrator, #simulation-refinement, #output-improvements>
+
+Version: 0.3.1
+
+### 🔄 [2024-06-29] Cross-Domain Triggers & Telemetry Buffer
+
+- 🔗 `flight_ops_core.py`: Added cross-domain event triggers: market stall triggers aircraft stall, traffic go-around triggers aircraft holding, and aircraft holding triggers traffic cleared-to-land.
+  _Effect: Simulation domains now interact, making the sim more dynamic and realistic._
+- 🕒 `flight_ops_core.py`: Each flight now tracks a rolling telemetry/history buffer (last 10 ticks) for time-series analysis and visualization.
+  _Effect: Enables replay, plotting, and advanced analytics for each flight._
+- 🎲 `flight_ops_core.py`: Market logic now allows price to drop below 100, making market stall events possible in normal runs.
+  _Effect: All cross-domain triggers can be observed in a typical simulation._
+
+---
+
+**Output Cues:**
+- Example: `[TRIGGER] Market flight MKT_SPY is stalled. Aircraft AC001 set to stall.`
+- Example: `[TRIGGER] Traffic flight TRF_PNW_1 in GoAround. Aircraft AC001 set to Holding phase.`
+- Example: `[TRIGGER] Aircraft AC001 held >2 ticks. Traffic TRF_PNW_1 set to ClearedToLand.`
+- Example: Each flight's `telemetry` field contains a rolling history of its recent states.
+
+---
+
+**Next:**  
+- Visualize telemetry/history for each flight (e.g., with matplotlib or a dashboard).
+- Add more complex or scenario-based cross-domain triggers.
+- Parameterize trigger logic for research and experimentation.
+
+**Ref:** <#cross-domain-triggers, #telemetry-buffer, #simulation-dynamics>

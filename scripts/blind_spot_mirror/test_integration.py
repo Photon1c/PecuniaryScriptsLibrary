@@ -210,6 +210,59 @@ def test_signals():
         return False
 
 
+def test_planner():
+    """Test PlayCard generation from signals."""
+    print("\n" + "=" * 60)
+    print("TEST 5: PlayCard generation (planner)")
+    print("=" * 60)
+    
+    try:
+        from planner import reason_play
+        
+        # Create test snapshot with flight data
+        test_data = {
+            "symbol": "SPY",
+            "spot": 450.25,
+            "mode": "Macro Cruise (Daily)",
+            "date": "2024-01-15",
+            "book": {"latest_close": 450.25},
+            "chain": [],
+            "flight_data": {
+                "net_gain": 2.5,
+                "max_altitude": 3.2,
+                "fuel_remaining": 75.0,
+                "stall_events": 0,
+                "turbulence_heavy": 0,
+                "turbulence_moderate": 1,
+                "latest_phase": "Thrust",
+                "telemetry": []
+            }
+        }
+        
+        snapshot = Snapshot(**test_data)
+        signals = compute_signals(snapshot)
+        
+        # Generate PlayCard
+        play_card = reason_play(snapshot, signals)
+        
+        print(f"✅ PASSED: PlayCard generation successful")
+        print(f"   Symbol: {play_card.symbol}")
+        print(f"   Direction: {play_card.direction}")
+        print(f"   Confidence: {play_card.confidence}")
+        print(f"   Entry: ${play_card.entry.get('price')}")
+        print(f"   Stop: ${play_card.stop.get('price')}")
+        print(f"   Targets: {play_card.targets}")
+        print(f"   Risk/Reward: {play_card.risk_reward}")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ FAILED: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
 def main():
     """Run all tests."""
     print("\n🧪 AEROTRADER + BSM INTEGRATION TEST SUITE\n")
@@ -219,6 +272,7 @@ def main():
         "Schema validation": test_snapshot_validation(),
         "Ingest function": test_ingest(),
         "Signal computation": test_signals(),
+        "PlayCard generation": test_planner(),
     }
     
     print("\n" + "=" * 60)

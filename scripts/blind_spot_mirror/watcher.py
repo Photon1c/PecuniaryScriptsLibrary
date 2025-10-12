@@ -24,7 +24,8 @@ def watch(symbol: str = "SPY", flight_mode: str = "daily"):
             # Log flight status
             if ss.flight_data:
                 fd = ss.flight_data
-                print(f"[BSM] {symbol} | Altitude: {fd.net_gain:+.2f}% | "
+                print(f"[BSM] {symbol} @ ${ss.spot:.2f} ({ss.date}) | "
+                      f"Altitude: {fd.net_gain:+.2f}% | "
                       f"Phase: {fd.latest_phase} | Fuel: {fd.fuel_remaining:.1f}% | "
                       f"Stalls: {fd.stall_events}")
             

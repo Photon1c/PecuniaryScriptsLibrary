@@ -1,0 +1,24 @@
+# Flight Plan: SPY
+
+## Data Source Verification
+- **Current Spot Price**: $652.00 (from CSV last row)
+- **Data Date**: 2024-01-12
+- **Flight Mode**: Macro Cruise (Daily)
+- **Generated**: 2024-10-12T16:09:21.543210
+
+## Trade Plan
+- **Direction**: PUT
+- **Confidence**: 42%
+- **Horizon**: 1-2 days
+- **Entry**: {'price': 639.96, 'reason': 'Flight-based PUT signal', 'timing': 'Market open'}
+- **Stop**: {'price': 666.08, 'reason': '2% risk limit', 'type': 'stop_loss'}
+- **Targets**: [620.37, 600.78, 587.72]
+- **Risk/Reward**: 0.75
+
+## Flight Conditions
+- **Preconditions**: ['Net gain: -2.77%', 'Phase: Thrust', 'Stalls: 2', 'Fuel: 0.0%']
+- **Alerts**: ['Monitor for phase reversal to Thrust', 'Watch for stall reduction', 'Track fuel recovery above 50%']
+
+## Notes
+Bearish signal with 42% confidence. Flight showing negative altitude (-2.77%) or high stall risk (2 events) in Thrust phase. Consider put options or short position.
+

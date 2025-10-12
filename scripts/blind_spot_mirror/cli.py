@@ -20,7 +20,17 @@ def main():
     ss = run_aerotrader(args.symbol, args.flight_mode)
     sig = compute_signals(ss)
     card = enforce(reason_play(ss, sig))
-    write_jsonl(card); print(write_flight_plan(card))
+    write_jsonl(card)
+    
+    # Display snapshot info for verification
+    print(f"\n📊 Data Verification:")
+    print(f"   Symbol: {ss.symbol}")
+    print(f"   Spot Price: ${ss.spot:.2f} (from CSV last row)")
+    print(f"   Data Date: {ss.date}")
+    print(f"   Mode: {ss.mode}")
+    
+    plan_path = write_flight_plan(card)
+    print(f"\n✈️ Flight plan written to: {plan_path}")
 
 if __name__ == "__main__":
     main()

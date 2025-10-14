@@ -1,0 +1,29 @@
+============================================================
+GAMMA FLIP PING PONG - PERFORMANCE REPORT
+============================================================
+
+Session Details:
+  Ticker: SPY
+  Start Time: 2025-10-13 20:50:27
+  End Time: 2025-10-13 20:50:35
+  Duration: 8.31 seconds
+  Backtesting Period: 10-1-2025 to 10-13-2025
+
+Position Details:
+  Position Size: $100.00
+  Entry Price: $668.45
+  Shares: 0.1496
+  Final Spot Price: $668.45
+  Final Flip Price: $668.24
+
+Performance Metrics:
+  Final P&L: $0.00
+  P&L %: 0.00%
+  Max P&L: $0.70
+  Min P&L: $-2.31
+  Total Hits: 3
+  Flip Score: 1
+  Price Updates: 8
+  Average P&L: $-0.05
+
+============================================================

@@ -1,7 +1,5 @@
 # Requires Microsoft Tinytroupe
 # Deploys sample conversation between two agents around an SPY chart.
-# Requires Microsoft Tinytroupe
-# Deploys sample conversation between two agents around an SPY chart.
 import os
 import time
 import json

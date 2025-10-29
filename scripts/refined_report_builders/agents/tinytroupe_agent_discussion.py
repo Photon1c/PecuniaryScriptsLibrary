@@ -22,7 +22,7 @@ HEADLESS = os.getenv("HEADLESS", "1") not in {"0", "false", "False"}
 # REPLACE agent setup with a configurable roster and a required 'residence' field
 AGENT_PROFILES: List[Dict] = [
     {
-        "name": "fred",
+        "name": "Fred",
         "age": 75,
         "occupation": "Baker, Mechanic, Accountant",
         "residence": "Trading Room",  # <- prevents KeyError: 'residence'
@@ -35,15 +35,15 @@ AGENT_PROFILES: List[Dict] = [
         }
     },
     {
-        "name": "tiffany",
-        "age": 21,
-        "occupation": "Model, Chemist, Gymnast",
+        "name": "Greg",
+        "age": 45,
+        "occupation": "Engineer, Chemist, Gymnast",
         "residence": "Trading Room",  # <- prevents KeyError: 'residence'
         "personality": {
             "traits": [
                 "Curious and analytical.",
                 "Loves cooking healthy food.",
-                "Very playful and energetic."
+                "Very focused and productivity centered."
             ]
         }
     }
@@ -92,7 +92,7 @@ def get_gpt_response(prompt):
     completions = client.chat.completions.create(
         model="gpt-4o",
         messages=[
-            {"role": "system", "content": "You are a stock market expert analyzing candlestick charts."},
+            {"role": "system", "content": "You are a stock market expert analyzing candlestick charts. Generate a brief summary about the candle wick and body structures. Your analysis will be used by other agents to refine a medium term trading strategy with minimal risk exposure."},
             {"role": "user", "content": prompt}  # Just text now
         ]
     )

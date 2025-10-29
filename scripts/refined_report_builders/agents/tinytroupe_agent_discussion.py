@@ -1,5 +1,7 @@
 # Requires Microsoft Tinytroupe
 # Deploys sample conversation between two agents around an SPY chart.
+# Requires Microsoft Tinytroupe
+# Deploys sample conversation between two agents around an SPY chart.
 import os
 import time
 import json
@@ -14,6 +16,43 @@ from PIL import Image
 import tinytroupe
 from tinytroupe.agent import TinyPerson
 from tinytroupe.environment import TinyWorld
+from typing import List, Dict, Optional
+
+# + add (near load_dotenv)
+HEADLESS = os.getenv("HEADLESS", "1") not in {"0", "false", "False"}
+
+# REPLACE agent setup with a configurable roster and a required 'residence' field
+AGENT_PROFILES: List[Dict] = [
+    {
+        "name": "fred",
+        "age": 75,
+        "occupation": "Baker, Mechanic, Accountant",
+        "residence": "Trading Room",  # <- prevents KeyError: 'residence'
+        "personality": {
+            "traits": [
+                "Patient and analytical.",
+                "Enjoys explaining solutions to problems with numbers.",
+                "Friendly and a good active listener."
+            ]
+        }
+    },
+    {
+        "name": "tiffany",
+        "age": 21,
+        "occupation": "Model, Chemist, Gymnast",
+        "residence": "Trading Room",  # <- prevents KeyError: 'residence'
+        "personality": {
+            "traits": [
+                "Curious and analytical.",
+                "Loves cooking healthy food.",
+                "Very playful and energetic."
+            ]
+        }
+    }
+]
+
+
+
 
 # Load environment variables
 load_dotenv()
@@ -35,27 +74,19 @@ screenshot_dir = "screenshots"
 os.makedirs(screenshot_dir, exist_ok=True)
 memory_file = "agent_memory.json"
 
-# Initialize agents
-fred = TinyPerson("fred")
-fred.define("age", 75)
-fred.define("occupation", "Baker, Mechanic, Accountant")
-fred.define("personality", {"traits": [
-    "Patient and analytical.",
-    "Enjoys explaining solutions to problems with numbers.",
-    "Friendly and a good active listener."
-]})
 
-tiffany = TinyPerson("tiffany")
-tiffany.define("age", 21)
-tiffany.define("occupation", "Model, Chemist, Gymnast")
-tiffany.define("personality", {"traits": [
-    "Curious and analytical.",
-    "Loves cooking healthy food.",
-    "Very playful and energetic."
-]})
 
-# Create world
-environment = TinyWorld("Trading Room", [fred, tiffany])
+agents: List[TinyPerson] = []
+for a in AGENT_PROFILES:
+    p = TinyPerson(a["name"])
+    # minimal, avoids surprises if TinyPerson validates keys internally
+    p.define("age", a["age"])
+    p.define("occupation", a["occupation"])
+    p.define("residence", a["residence"])   # <-- required by tinytroupe world logic
+    p.define("personality", a["personality"])
+    agents.append(p)
+
+environment = TinyWorld("Trading Room", agents)
 environment.make_everyone_accessible()
 
 # Function to query OpenAI's GPT-4o
@@ -68,6 +99,26 @@ def get_gpt_response(prompt):
         ]
     )
     return completions.choices[0].message.content.strip()
+
+def _new_chrome():
+    options = Options()
+    options.add_argument("--window-size=1920x1080")
+    if HEADLESS:
+        options.add_argument("--headless=new")
+    service = Service(ChromeDriverManager().install())
+    return webdriver.Chrome(service=service, options=options)
+
+def capture_page_screenshot(driver, url: str, out_name: str) -> Optional[str]:
+    try:
+        driver.get(url)
+        time.sleep(5)  # simple wait; replace with explicit waits if you like
+        path = os.path.join(screenshot_dir, out_name)
+        driver.save_screenshot(path)
+        return path if os.path.exists(path) else None
+    except Exception as e:
+        print(f"[screenshot] {url} -> {e}")
+        return None
+
 
 # Function to capture TradingView chart
 def capture_tradingview_chart(symbol):
@@ -103,46 +154,111 @@ def upload_image_to_imagekit(image_path):
         print(f"Error uploading image: {e}")
         return None
 
+def upload_many_to_imagekit(paths: List[str]) -> List[str]:
+    urls: List[str] = []
+    for p in paths:
+        if not p or not os.path.exists(p):
+            continue
+        try:
+            with open(p, "rb") as f:
+                up = imagekit.upload(file=f, file_name=os.path.basename(p))
+            urls.append(up.response_metadata.raw["url"])
+        except Exception as e:
+            print(f"[imagekit] {p} -> {e}")
+    return urls
+
+
 # Function to analyze chart using GPT-4o Vision
-def analyze_chart_with_gpt4o(image_url):
+def analyze_charts_with_gpt4o(image_urls: List[str]) -> str:
+    if not image_urls:
+        return "No images available for analysis."
     try:
-        response = client.chat.completions.create(
+        # Build a multi-part message with several images
+        user_content: List[Dict] = [
+            {"type": "text", "text": (
+                "You will analyze several related screenshots for SPY:\n"
+                "1) TradingView price chart (context)\n"
+                "2) Barchart Gamma Exposure (dealers' gamma risk)\n"
+                "3) Barchart Max Pain chart (OI-based pain point)\n"
+                "4) Barchart Volatility charts (IV trends)\n\n"
+                "Task: synthesize trends, wick/body behavior, IV regime, gamma posture, "
+                "and propose entry/exit **ranges** for the next 3 sessions with caveats. "
+                "Return:\n- A brief narrative\n- A GitHub Markdown table of entries/exits "
+                "(low/likely/high) for each day\n- Key risks to invalidate the plan"
+            )}
+        ]
+        for u in image_urls:
+            user_content.append({"type": "image_url", "image_url": {"url": u}})
+
+        resp = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "Analyze the stock chart image and provide insights."},
-                {"role": "user", "content": [
-                    {"type": "text", "text": "Describe trends, volatility, and possible price action. Study the wick and candle body sizes."},
-                    {"type": "image_url", "image_url": {"url": image_url}}
-                ]}
+                {"role": "system", "content": "Analyze stock context, gamma, max-pain, and IV coherently."},
+                {"role": "user", "content": user_content}
             ]
         )
-        return response.choices[0].message.content.strip()
+        return resp.choices[0].message.content.strip()
     except Exception as e:
-        return f"Error analyzing chart: {e}"
+        return f"Error analyzing charts: {e}"
+
 
 # Execute stock chart analysis
-def analyze_stock_chart(symbol):
-    print("\n=== Capturing TradingView Chart ===")
-    chart_path = capture_tradingview_chart(symbol)
-    if not chart_path:
-        return "Chart capture failed."
-    
-    print("\n=== Uploading Image to ImageKit ===")
-    image_url = upload_image_to_imagekit(chart_path)
-    if not image_url or "Error" in image_url:
+def analyze_stock_chart(symbol: str):
+    print("\n=== Capturing pages ===")
+    urls = {
+        "tradingview": f"https://www.tradingview.com/chart/?symbol={symbol}",
+        "gex": "https://www.barchart.com/etfs-funds/quotes/SPY/gamma-exposure",
+        "maxpain": "https://www.barchart.com/etfs-funds/quotes/SPY/max-pain-chart",
+        "vol": "https://www.barchart.com/etfs-funds/quotes/SPY/volatility-charts",
+    }
+
+    driver = _new_chrome()
+    shots: List[str] = []
+    try:
+        shots.append(capture_page_screenshot(driver, urls["tradingview"], f"{symbol}_price.png"))
+        shots.append(capture_page_screenshot(driver, urls["gex"],        f"{symbol}_gex.png"))
+        shots.append(capture_page_screenshot(driver, urls["maxpain"],    f"{symbol}_maxpain.png"))
+        shots.append(capture_page_screenshot(driver, urls["vol"],        f"{symbol}_vol.png"))
+    finally:
+        driver.quit()
+
+    shots = [p for p in shots if p]  # drop Nones
+    if not shots:
+        return "Screenshot capture failed."
+
+    print("\n=== Uploading to ImageKit ===")
+    image_urls = upload_many_to_imagekit(shots)
+    if not image_urls:
         return "Image upload failed."
-    
-    print("\n=== AI Analysis ===")
-    ai_analysis = analyze_chart_with_gpt4o(image_url)
-    print(f"AI Analysis: {ai_analysis}")
-    
+
+    print("\n=== AI Synthesis (vision over multiple images) ===")
+    ai_summary = analyze_charts_with_gpt4o(image_urls)
+    print(ai_summary)
+
     print("\n=== Agents Responding ===")
-    fred_response = get_gpt_response(f"Fred, provide an expert opinion on the AI's analysis, generate a summary GitHub markdown table formatted containing suggested entry and exit prices for the next three days: {ai_analysis}")
-    tiffany_response = get_gpt_response(f"Tiffany, respond to fred's thoughts and work with him to improve his Github markdown table recommending entry and exit ranges for the next three days. Stop when done: {fred_response}")
-    
-    fred.listen(fred_response)
-    tiffany.listen(tiffany_response)
-    environment.run(4)
+    # Fred drafts, Tiffany critiques/refines. Agents read the multi-image synthesis.
+    fred_resp = get_gpt_response(
+        "Fred: Using the synthesis below, write a succinct GitHub Markdown table of entry/exit ranges "
+        "for the next 3 sessions. Include a one-paragraph rationale referencing price context, GEX posture, "
+        "max-pain pull, and IV regime. Keep it practical.\n\n" + ai_summary
+    )
+    tiffany_resp = get_gpt_response(
+        "Tiffany: Improve Fred's table if needed, add brief color on risks (IV crush/expansion, "
+        "gamma flip proximity, macro catalysts). Return final table only if it improves clarity. "
+        "Stop when done.\n\n" + fred_resp
+    )
+
+    # Feed the agents and run a short scene
+    for a, msg in [(agents[0], fred_resp), (agents[1], tiffany_resp)]:
+        a.listen(msg)
+
+    try:
+        environment.run(4)  # short round; tweakable
+    except Exception as e:
+        print(f"[Trading Room] run error: {e}")
+
+    return ai_summary
+
     
     return ai_analysis
 

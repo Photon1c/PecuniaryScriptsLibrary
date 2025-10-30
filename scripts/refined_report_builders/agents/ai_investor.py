@@ -2,6 +2,10 @@
 
 FOR EDUCATION PURPOSES ONLY, NOT REAL INVESTMENT ADVICE
 
+Version 1.0
+
+Standalone script
+
 ""
 
 import datetime

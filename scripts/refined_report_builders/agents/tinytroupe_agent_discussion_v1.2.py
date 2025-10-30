@@ -1,5 +1,6 @@
 # Requires Microsoft Tinytroupe
 # Deploys sample conversation between two agents around an SPY chart.
+# Backup version used for testing
 from dotenv import load_dotenv
 from openai import OpenAI
 from selenium import webdriver

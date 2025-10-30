@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Tinytroupe Agent Run</title>
+  <!-- quick Tailwind CDN for demo, replace with local later -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+  <div class="max-w-6xl mx-auto py-8 px-4">
+    <h1 class="text-3xl font-bold mb-6 flex items-center gap-2">
+      🛰️ Agent Reasoning Dashboard
+    </h1>
+    <form method="get" class="mb-6 flex items-center gap-2">
+      <input name="q" value="{{ q or '' }}" placeholder="Filter by keyword (agent or content)" class="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 placeholder-slate-500" />
+      <button class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm px-3 py-2 rounded" type="submit">Filter</button>
+      {% if q %}
+        <a href="/" class="text-xs text-slate-400 underline">Clear</a>
+      {% endif %}
+    </form>
+
+    {% for step in steps %}
+      <details class="mb-4 bg-slate-900/50 rounded-lg border border-slate-800">
+        <summary class="cursor-pointer px-4 py-3 flex items-center justify-between">
+          <span class="font-semibold">{{ step }}</span>
+          <span class="text-xs text-slate-400">{{ grouped[step]|length }} turns</span>
+        </summary>
+        <div class="p-4 space-y-3">
+          {% for item in grouped[step] %}
+            <div class="bg-slate-900 rounded-md border border-slate-800 p-3">
+              <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-2">
+                  <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
+                               {% if item.sentiment == 'positive' %} bg-emerald-600/80 {% elif item.sentiment == 'negative' %} bg-rose-600/80 {% else %} bg-slate-600/80 {% endif %}">
+                    {{ item.agent }}
+                  </span>
+                  <span class="text-xs text-slate-400 uppercase tracking-wide">
+                    {{ item.act }}
+                  </span>
+                </div>
+                <span class="text-[10px] text-slate-500">raw keys: {{ item.raw.keys()|list }}</span>
+              </div>
+              <p class="text-sm leading-relaxed whitespace-pre-wrap">
+                {{ item.content }}
+              </p>
+            </div>
+          {% endfor %}
+        </div>
+      </details>
+    {% endfor %}
+  </div>
+</body>
+</html>

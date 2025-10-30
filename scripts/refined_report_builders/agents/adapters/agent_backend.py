@@ -1,5 +1,7 @@
-"" *Not an entry file, used as support
-""
+"""
+*Not an entry file, used as support
+
+"""
 # adapters/agent_backend.py
 from __future__ import annotations
 from typing import Dict, Any, List, Optional
@@ -51,8 +53,13 @@ class OpenAIBackend(AgentBackend):
                     if part.get("type") == "text":
                         content_items.append({"type": "text", "text": part["text"]})
                     elif part.get("type") == "image":
-                        # If local path, you can convert to data URL or upload; here we just pass the path/URL
-                        content_items.append({"type": "input_image", "image_url": part["path_or_url"]})
+                        # OpenAI chat.completions expects image content as {type: "image_url", image_url: {url}}
+                        url = part.get("path_or_url")
+                        if url:
+                            content_items.append({
+                                "type": "image_url",
+                                "image_url": {"url": url}
+                            })
             else:
                 content_items.append({"type": "text", "text": str(c)})
             oai_msgs.append({"role": role, "content": content_items})
@@ -73,8 +80,19 @@ class OpenAIBackend(AgentBackend):
             raise
 
         content = rsp.choices[0].message.content
-        usage = getattr(rsp, "usage", None) or {}
-        return {"content": content, "usage": {"completion_tokens": usage.get("completion_tokens", max_tokens//2)}}
+        usage_obj = getattr(rsp, "usage", None)
+        completion_tokens = None
+        # Support both mapping-like and attribute-style usage objects
+        if usage_obj is not None:
+            try:
+                completion_tokens = getattr(usage_obj, "completion_tokens")
+            except Exception:
+                completion_tokens = None
+            if completion_tokens is None and isinstance(usage_obj, dict):
+                completion_tokens = usage_obj.get("completion_tokens")
+        if completion_tokens is None:
+            completion_tokens = max_tokens // 2
+        return {"content": content, "usage": {"completion_tokens": completion_tokens}}
 
 def get_backend(name: str) -> AgentBackend:
     name = (name or "").lower()

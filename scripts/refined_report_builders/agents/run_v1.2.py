@@ -1,3 +1,4 @@
+#Entry files for v1.2
 from discuss_v12 import run_discussion_v1_2, AgentConfig
 from adapters.agent_backend import AgentBackend, get_backend
 from adapters.prompts import get_role_prompt, get_system_prompt, ModerationDecision
@@ -21,3 +22,4 @@ result = run_discussion_v1_2(
     rounds=2,
 )
 print(result["transcript"])
+

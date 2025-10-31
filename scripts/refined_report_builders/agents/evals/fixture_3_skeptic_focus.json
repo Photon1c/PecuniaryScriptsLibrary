@@ -1,0 +1,14 @@
+{
+  "name": "skeptic_focus",
+  "description": "Skeptic-heavy agent configuration",
+  "agents": [
+    {"name": "Skeptic1", "role": "skeptic", "model_id": "gpt-4o-mini", "domain": "markets", "temperature": 0.1},
+    {"name": "Skeptic2", "role": "skeptic", "model_id": "gpt-4o-mini", "domain": "markets", "temperature": 0.2}
+  ],
+  "images": ["https://www.barchart.com/etfs-funds/quotes/SPY/gamma-exposure"],
+  "topic_hint": "Critical analysis of market assumptions",
+  "rounds": 1,
+  "expected_min_turns": 2,
+  "expected_agents": ["Skeptic1", "Skeptic2"]
+}
+

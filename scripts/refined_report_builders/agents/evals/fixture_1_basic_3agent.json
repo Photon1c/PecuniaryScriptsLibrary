@@ -1,0 +1,15 @@
+{
+  "name": "basic_3agent",
+  "description": "Basic 3-agent discussion with minimal images",
+  "agents": [
+    {"name": "Ava", "role": "quant", "model_id": "gpt-4o-mini", "domain": "markets"},
+    {"name": "Blake", "role": "risk_manager", "model_id": "gpt-4o-mini", "domain": "markets"},
+    {"name": "Casey", "role": "skeptic", "model_id": "gpt-4o-mini", "domain": "markets"}
+  ],
+  "images": ["https://www.barchart.com/etfs-funds/quotes/SPY/gamma-exposure"],
+  "topic_hint": "SPY gamma exposure analysis",
+  "rounds": 1,
+  "expected_min_turns": 3,
+  "expected_agents": ["Ava", "Blake", "Casey"]
+}
+

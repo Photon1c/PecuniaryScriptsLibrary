@@ -1,0 +1,16 @@
+{
+  "name": "multiple_images",
+  "description": "Test with multiple image URLs",
+  "agents": [
+    {"name": "Quant", "role": "quant", "model_id": "gpt-4o-mini", "domain": "markets"}
+  ],
+  "images": [
+    "https://www.barchart.com/etfs-funds/quotes/SPY/gamma-exposure",
+    "https://www.barchart.com/etfs-funds/quotes/SPY/volatility-charts"
+  ],
+  "topic_hint": "Multi-image analysis",
+  "rounds": 2,
+  "expected_min_turns": 2,
+  "expected_agents": ["Quant"]
+}
+

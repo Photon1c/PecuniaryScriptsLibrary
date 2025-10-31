@@ -1,0 +1,11 @@
+{
+  "name": "accounting_1",
+  "images": [
+    "https://via.placeholder.com/800x600?text=Financial+Statement"
+  ],
+  "topic_hint": "Review quarterly financial statement for discrepancies",
+  "agents": [
+    {"name": "Auditor1", "role": "auditor", "domain": "accounting"}
+  ]
+}
+

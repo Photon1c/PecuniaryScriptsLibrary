@@ -1,0 +1,13 @@
+{
+  "name": "single_round",
+  "description": "Minimal single round execution",
+  "agents": [
+    {"name": "Analyst", "role": "quant", "model_id": "gpt-4o-mini", "domain": "markets"}
+  ],
+  "images": ["https://www.barchart.com/etfs-funds/quotes/SPY/gamma-exposure"],
+  "topic_hint": "Quick analysis",
+  "rounds": 1,
+  "expected_min_turns": 1,
+  "expected_agents": ["Analyst"]
+}
+

@@ -1,0 +1,14 @@
+{
+  "name": "long_conversation",
+  "description": "Extended multi-round discussion",
+  "agents": [
+    {"name": "Ava", "role": "quant", "model_id": "gpt-4o-mini", "domain": "markets"},
+    {"name": "Blake", "role": "risk_manager", "model_id": "gpt-4o-mini", "domain": "markets"}
+  ],
+  "images": ["https://www.barchart.com/etfs-funds/quotes/SPY/gamma-exposure"],
+  "topic_hint": "Extended analysis",
+  "rounds": 4,
+  "expected_min_turns": 8,
+  "expected_agents": ["Ava", "Blake"]
+}
+

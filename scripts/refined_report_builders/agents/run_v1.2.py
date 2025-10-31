@@ -1,25 +1,22 @@
-#Entry files for v1.2
-from discuss_v12 import run_discussion_v1_2, AgentConfig
-from adapters.agent_backend import AgentBackend, get_backend
-from adapters.prompts import get_role_prompt, get_system_prompt, ModerationDecision
+from discuss_v12 import run_discussion_v1_2
+from agent_loader import load_preset
 from dotenv import load_dotenv
 
 load_dotenv()
-# Example (keep out of prod file if you like):
-agents = [
-    AgentConfig(name="Ava", role="quant", model_id="gpt-4o-mini", domain="markets"),
-    AgentConfig(name="Blake", role="risk_manager", model_id="gpt-4o-mini", domain="markets"),
-    AgentConfig(name="Casey", role="skeptic", model_id="gpt-4o-mini", domain="markets"),
-]
+
+# Load agents from preset (default: "markets")
+# You can change the preset name here or use the CLI: python discuss_v12.py --preset minimal
+preset_name = "markets"
+preset_config = load_preset(preset_name)
+
 result = run_discussion_v1_2(
     images=[
         "https://www.barchart.com/etfs-funds/quotes/SPY/gamma-exposure",
         "https://www.barchart.com/etfs-funds/quotes/SPY/volatility-charts"
     ],
-    agents=agents,
+    agents=preset_config["agents"],
     backend_name="openai",
-    topic_hint="SPY dealer gamma vs vol regime for Monday open",
+    topic_hint=preset_config["topic_hint"] or "SPY dealer gamma vs vol regime for Monday open",
     rounds=2,
 )
 print(result["transcript"])
-

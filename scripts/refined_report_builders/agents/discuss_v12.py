@@ -13,10 +13,48 @@ from tinytroupe.agent import TinyPerson
 from tinytroupe.environment import TinyWorld
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional, Iterable
-import json, time, random, os, pathlib
+import json, time, random, os, pathlib, sys
 
 from adapters.agent_backend import AgentBackend, get_backend
 from adapters.prompts import get_role_prompt, get_system_prompt, ModerationDecision
+from agent_loader import load_preset, load_agents_from_preset
+
+# Settings validation
+def validate_settings() -> Dict[str, Any]:
+    """Validate settings against schema.json at startup."""
+    schema_path = pathlib.Path(__file__).parent / "settings.schema.json"
+    if not schema_path.exists():
+        print(f"[WARN] settings.schema.json not found at {schema_path}")
+        return {}
+    
+    try:
+        import jsonschema
+    except ImportError:
+        print("[WARN] jsonschema not installed; skipping validation")
+        return {}
+    
+    with schema_path.open("r", encoding="utf-8") as f:
+        schema = json.load(f)
+    
+    # Build settings from env + defaults
+    settings = {
+        "backend_name": os.getenv("TT_BACKEND", "openai"),
+        "model_id": os.getenv("TT_MODEL", "gpt-4o-mini"),
+        "rounds": int(os.getenv("TT_ROUNDS", "3")),
+        "seed": int(os.getenv("TT_SEED", "42")),
+        "soft_guardrails": os.getenv("TT_GUARDRAILS", "1") not in {"0", "false", "False"},
+        "turn_timeout_s": int(os.getenv("TT_TIMEOUT", "40")),
+        "global_max_tokens": int(os.getenv("TT_MAX_TOKENS", "3000")),
+        "headless": os.getenv("HEADLESS", "1") not in {"0", "false", "False"},
+    }
+    
+    try:
+        jsonschema.validate(instance=settings, schema=schema)
+        print("[OK] Settings validated against schema")
+        return settings
+    except jsonschema.ValidationError as e:
+        print(f"[ERROR] Settings validation failed: {e.message}")
+        raise
 
 DEFAULT_SEED = int(os.environ.get("TT_SEED", "42"))
 TRANSCRIPTS_DIR = pathlib.Path(os.environ.get("TT_TRANSCRIPTS_DIR", "./transcripts"))
@@ -136,6 +174,8 @@ class MultiImageDiscussionOrchestrator:
         self.soft_guardrails = soft_guardrails
         self.transcript_path = TRANSCRIPTS_DIR / f"{int(time.time())}_{transcript_tag}.jsonl"
         self._token_budget = global_max_tokens
+        self._rounds_completed = 0
+        self._budget_exhausted = False
 
     # NEW: core run
     def run(self) -> Dict[str, Any]:
@@ -160,23 +200,40 @@ class MultiImageDiscussionOrchestrator:
 
         # Each round: every agent speaks once
         for r in range(self.round_count):
+            round_complete = True
             for cfg in self.agents:
                 if self._token_budget <= 0:
+                    self._budget_exhausted = True
+                    round_complete = False
                     break
                 turn = self._agent_turn(cfg=cfg, conversation=conversation)
                 if turn:
                     conversation.append(turn)
                     self._append_jsonl({"round": r, "turn": turn})
-            if self._token_budget <= 0:
+            if self._budget_exhausted:
                 break
+            if round_complete:
+                self._rounds_completed = r + 1
 
-        # Final: backend summary
-        summary = self._final_summary(conversation)
-        if summary:
-            conversation.append(summary)
-            self._append_jsonl({"round": "final", "turn": summary})
+        # Final: backend summary (only if budget allows)
+        summary = None
+        if self._token_budget > 120:
+            summary = self._final_summary(conversation)
+            if summary:
+                conversation.append(summary)
+                self._append_jsonl({"round": "final", "turn": summary})
 
-        return {"status": "ok", "conversation": conversation, "transcript": str(self.transcript_path)}
+        status = "ok"
+        if self._budget_exhausted and self._rounds_completed < self.round_count:
+            status = "partial"
+
+        return {
+            "status": status,
+            "conversation": conversation,
+            "transcript": str(self.transcript_path),
+            "rounds_completed": self._rounds_completed,
+            "budget_exhausted": self._budget_exhausted,
+        }
 
     # NEW: single agent turn with guardrails + timeout
     def _agent_turn(self, cfg: AgentConfig, conversation: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -525,26 +582,65 @@ def run_discussion_v1_2(
 
 if __name__ == "__main__":
     import argparse
+    
+    # Validate settings at startup
+    try:
+        validate_settings()
+    except Exception as e:
+        print(f"[WARN] Settings validation issue: {e}")
+        print("[WARN] Continuing anyway...")
+    
     p = argparse.ArgumentParser(description="TinyTroupe v1.2 Multi-Image Discussion")
-    p.add_argument("--images", nargs="+", required=True, help="Paths/URLs to images")
+    p.add_argument("--images", nargs="+", help="Paths/URLs to images")
+    p.add_argument("--preset", default="markets",
+                   help="Use preset agent configuration (e.g., markets, minimal, balanced, critical)")
     p.add_argument("--backend", default="openai")
     p.add_argument("--rounds", type=int, default=3)
     p.add_argument("--seed", type=int, default=DEFAULT_SEED)
-    p.add_argument("--topic", default="", help="Short topic hint")
+    p.add_argument("--topic", default="", help="Short topic hint (overrides preset topic_hint)")
+    p.add_argument("--dry-run", action="store_true",
+                   help="Validate config and show what would run, but don't execute")
     args = p.parse_args()
 
-    # Minimal 3-agent preset (markets default)
-    agents = [
-        AgentConfig(name="Ava", role="quant", model_id=os.getenv("TT_MODEL", "gpt-4o-mini")),
-        AgentConfig(name="Blake", role="risk_manager", model_id=os.getenv("TT_MODEL", "gpt-4o-mini")),
-        AgentConfig(name="Casey", role="skeptic", model_id=os.getenv("TT_MODEL", "gpt-4o-mini"), temperature=0.1),
-    ]
+    # Load preset configuration
+    try:
+        preset_config = load_preset(args.preset, default_model=os.getenv("TT_MODEL", "gpt-4o-mini"))
+        agents = preset_config["agents"]
+        preset_topic = preset_config["topic_hint"]
+    except ValueError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
+    
+    # Use topic from CLI if provided, otherwise from preset
+    topic_hint = args.topic if args.topic else preset_topic
+    
+    # If using preset but no images provided, use default
+    if args.images:
+        images = args.images
+    else:
+        images = [
+            "https://www.barchart.com/etfs-funds/quotes/SPY/gamma-exposure",
+            "https://www.barchart.com/etfs-funds/quotes/SPY/volatility-charts"
+        ]
+
+    if args.dry_run:
+        print("[DRY RUN] Configuration:")
+        print(f"  Preset: {args.preset}")
+        print(f"  Agents: {[a.name for a in agents]}")
+        print(f"  Images: {len(images)}")
+        print(f"  Backend: {args.backend}")
+        print(f"  Rounds: {args.rounds}")
+        print(f"  Topic: {topic_hint or '(none)'}")
+        print("[DRY RUN] Would execute, but --dry-run flag set.")
+        sys.exit(0)
+
     result = run_discussion_v1_2(
-        images=args.images,
+        images=images,
         agents=agents,
         backend_name=args.backend,
-        topic_hint=args.topic,
+        topic_hint=topic_hint,
         rounds=args.rounds,
+        seed=args.seed,
     )
     print(json.dumps({"status": result["status"], "transcript": result.get("transcript")}, indent=2))
 

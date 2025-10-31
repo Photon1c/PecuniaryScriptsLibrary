@@ -1,0 +1,15 @@
+{
+  "name": "mixed_roles",
+  "description": "Mix of different role types",
+  "agents": [
+    {"name": "Quant", "role": "quant", "model_id": "gpt-4o-mini", "domain": "markets"},
+    {"name": "Risk", "role": "risk_manager", "model_id": "gpt-4o-mini", "domain": "markets"},
+    {"name": "Skeptic", "role": "skeptic", "model_id": "gpt-4o-mini", "domain": "markets"}
+  ],
+  "images": ["https://www.barchart.com/etfs-funds/quotes/SPY/gamma-exposure"],
+  "topic_hint": "Comprehensive market analysis",
+  "rounds": 2,
+  "expected_min_turns": 6,
+  "expected_agents": ["Quant", "Risk", "Skeptic"]
+}
+

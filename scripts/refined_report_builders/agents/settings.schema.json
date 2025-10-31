@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "tinytroupe-agents-settings",
+  "type": "object",
+  "required": ["transcripts_dir", "default_backend", "default_model", "presets"],
+  "properties": {
+    "transcripts_dir": {
+      "type": "string",
+      "description": "Where to write JSONL transcripts"
+    },
+    "default_backend": {
+      "type": "string",
+      "enum": ["openai", "anthropic", "google", "qwen", "deepseek", "xai"]
+    },
+    "default_model": {
+      "type": "string",
+      "minLength": 1
+    },
+    "presets": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["agents", "topic_hint"],
+        "properties": {
+          "topic_hint": { "type": "string" },
+          "agents": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "role"],
+              "properties": {
+                "name": { "type": "string" },
+                "role": { "type": "string" },
+                "domain": { "type": "string" },
+                "model_id": { "type": "string" },
+                "temperature": { "type": "number" },
+                "max_tokens": { "type": "integer" }
+              },
+              "additionalProperties": false
+            },
+            "minItems": 1
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
+

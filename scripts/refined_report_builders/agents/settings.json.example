@@ -1,0 +1,22 @@
+{
+  "transcripts_dir": "./transcripts",
+  "default_backend": "openai",
+  "default_model": "gpt-4o-mini",
+  "presets": {
+    "markets": {
+      "topic_hint": "Market analysis",
+      "agents": [
+        {"name": "Ava", "role": "quant", "domain": "markets"},
+        {"name": "Blake", "role": "risk_manager", "domain": "markets"},
+        {"name": "Casey", "role": "skeptic", "domain": "markets"}
+      ]
+    },
+    "minimal": {
+      "topic_hint": "Quick analysis",
+      "agents": [
+        {"name": "Analyst", "role": "quant", "domain": "markets"}
+      ]
+    }
+  }
+}
+

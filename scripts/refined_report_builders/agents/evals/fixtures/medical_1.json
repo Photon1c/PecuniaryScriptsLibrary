@@ -1,0 +1,11 @@
+{
+  "name": "medical_1",
+  "images": [
+    "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=800"
+  ],
+  "topic_hint": "X-ray analysis for clinical review",
+  "agents": [
+    {"name": "Dr. Smith", "role": "radiologist", "domain": "medical"}
+  ]
+}
+

@@ -1,0 +1,14 @@
+{
+  "name": "markets_1",
+  "images": [
+    "https://www.barchart.com/etfs-funds/quotes/SPY/gamma-exposure",
+    "https://www.barchart.com/etfs-funds/quotes/SPY/volatility-charts"
+  ],
+  "topic_hint": "SPY dealer gamma vs vol regime for Monday open",
+  "agents": [
+    {"name": "Ava", "role": "quant", "domain": "markets"},
+    {"name": "Blake", "role": "risk_manager", "domain": "markets"},
+    {"name": "Casey", "role": "skeptic", "domain": "markets"}
+  ]
+}
+

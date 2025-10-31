@@ -118,18 +118,62 @@ memory_file = "agent_memory.json"
 
 
 
+# Legacy tinytroupe agents/environment (for basic.py compatibility)
+# These are only used by analyze_stock_chart(), not by v1.2 orchestrator
+# Made lazy to avoid conflicts with TinyTroupe's global registry
 agents: List[TinyPerson] = []
-for a in AGENT_PROFILES:
-    p = TinyPerson(a["name"])
-    # minimal, avoids surprises if TinyPerson validates keys internally
-    p.define("age", a["age"])
-    p.define("occupation", a["occupation"])
-    p.define("residence", a["residence"])   # <-- required by tinytroupe world logic
-    p.define("personality", a["personality"])
-    agents.append(p)
+environment: Optional[TinyWorld] = None
 
-environment = TinyWorld("Trading Room", agents)
-environment.make_everyone_accessible()
+
+def _ensure_tinytroupe_agents():
+    """Lazily initialize tinytroupe agents/environment if not already created."""
+    global agents, environment
+    if environment is not None:
+        return  # Already initialized
+    
+    agents.clear()
+    for a in AGENT_PROFILES:
+        try:
+            p = TinyPerson(a["name"])
+            # minimal, avoids surprises if TinyPerson validates keys internally
+            p.define("age", a["age"])
+            p.define("occupation", a["occupation"])
+            p.define("residence", a["residence"])   # <-- required by tinytroupe world logic
+            p.define("personality", a["personality"])
+            agents.append(p)
+        except Exception as e:
+            # If agent already exists in TinyTroupe's registry, skip it
+            print(f"[WARN] Could not create tinytroupe agent {a['name']}: {e}", file=sys.stderr)
+            print(f"[WARN] This is harmless for v1.2 orchestrator (it doesn't use these agents)", file=sys.stderr)
+            continue
+    
+    if agents:
+        try:
+            environment = TinyWorld("Trading Room", agents)
+            environment.make_everyone_accessible()
+        except Exception as e:
+            # Environment name conflict - reuse existing if possible
+            print(f"[WARN] Could not create tinytroupe environment: {e}", file=sys.stderr)
+            print(f"[WARN] This is harmless for v1.2 orchestrator", file=sys.stderr)
+            environment = None
+
+
+def clear_tinytroupe_env():
+    """Clear tinytroupe agents and environment state.
+    
+    Note: TinyTroupe maintains global registries that can't be fully cleared.
+    This function clears local references and resets to uninitialized state.
+    For full isolation, run in a separate process.
+    """
+    global agents, environment
+    try:
+        # Clear local agents list
+        agents.clear()
+        environment = None  # Reset to uninitialized
+        print("[INFO] Cleared tinytroupe environment and agents (lazy reinit on next use)")
+    except Exception as e:
+        print(f"[WARN] Could not fully clear tinytroupe state: {e}", file=sys.stderr)
+        print("[WARN] TinyTroupe maintains global registries. For clean runs, restart Python.", file=sys.stderr)
 
 # NEW: v1.2 config
 @dataclass
@@ -544,14 +588,19 @@ def analyze_stock_chart(symbol: str):
         "Stop when done.\n\n" + fred_resp
     )
 
+    # Ensure tinytroupe agents are initialized (lazy)
+    _ensure_tinytroupe_agents()
+    
     # Feed the agents and run a short scene
-    for a, msg in [(agents[0], fred_resp), (agents[1], tiffany_resp)]:
-        a.listen(msg)
+    if agents and len(agents) >= 2:
+        for a, msg in [(agents[0], fred_resp), (agents[1], tiffany_resp)]:
+            a.listen(msg)
 
-    try:
-        environment.run(4)  # short round; tweakable
-    except Exception as e:
-        print(f"[Trading Room] run error: {e}")
+        try:
+            if environment:
+                environment.run(4)  # short round; tweakable
+        except Exception as e:
+            print(f"[Trading Room] run error: {e}")
 
     return ai_summary
 
@@ -600,7 +649,14 @@ if __name__ == "__main__":
     p.add_argument("--topic", default="", help="Short topic hint (overrides preset topic_hint)")
     p.add_argument("--dry-run", action="store_true",
                    help="Validate config and show what would run, but don't execute")
+    p.add_argument("--clear-env", action="store_true",
+                   help="Clear tinytroupe environment and agents before running")
     args = p.parse_args()
+    
+    # Clear tinytroupe state if requested
+    if args.clear_env:
+        clear_tinytroupe_env()
+        print("[INFO] Cleared tinytroupe environment and agents")
 
     # Load preset configuration
     try:

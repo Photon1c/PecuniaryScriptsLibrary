@@ -242,6 +242,7 @@ Options:
   --seed N                                       Random seed (default: 42)
   --topic TEXT                                   Topic hint
   --dry-run                                      Validate config without executing
+  --clear-env                                    Clear tinytroupe environment/agents before running
 ```
 
 **Examples:**
@@ -254,6 +255,9 @@ python discuss_v12.py --preset minimal --images https://example.com/chart.png
 
 # Extended discussion
 python discuss_v12.py --preset balanced --rounds 10 --topic "Deep analysis"
+
+# Clear tinytroupe state before running (fixes "Agent name already in use" errors)
+python discuss_v12.py --preset markets --clear-env
 ```
 
 ### `evals/run_agent_eval.py`

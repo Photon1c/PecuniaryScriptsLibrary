@@ -1104,9 +1104,9 @@ class ReflexivityCalculator:
         ax3 = axes[1, 0]
         width = (file_profile['Strike'].iloc[1] - file_profile['Strike'].iloc[0]) * 0.4
         ax3.bar(file_profile['Strike'] - width/2, file_profile['CallOI'], 
-               width=width, label='Call OI', color='red', alpha=0.6)
+               width=width, label='Call OI', color='green', alpha=0.6)
         ax3.bar(file_profile['Strike'] + width/2, file_profile['PutOI'], 
-               width=width, label='Put OI', color='green', alpha=0.6)
+               width=width, label='Put OI', color='red', alpha=0.6)
         ax3.axvline(x=spot, color='blue', linestyle='--', linewidth=2, label=f'Spot: ${spot:.2f}')
         
         ax3.set_title('Open Interest Distribution', fontweight='bold')

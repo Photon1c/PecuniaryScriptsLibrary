@@ -25,8 +25,8 @@ CSV_PATH = Path(r"C:/workingcauldron/inputs/options/log/spy/05_19_2025/spy_quote
 SKIP_ROWS = 3
 
 # Range of candidate spot levels to visualize
-STRIKE_MIN = 500
-STRIKE_MAX = 650
+STRIKE_MIN = 600
+STRIKE_MAX = 690
 
 # Plot appearance
 PLOT_TITLE = "Gamma-weighted Net Parking Pressure vs Strike"

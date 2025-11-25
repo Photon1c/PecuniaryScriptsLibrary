@@ -20,7 +20,7 @@ from pathlib import Path
 # =============== USER PARAMETERS (EDIT THESE ONLY) ===============
 # ================================================================
 
-CSV_PATH = Path(r"F:\inputs\options\05_19_2025\spy_quotedata.csv")
+CSV_PATH = Path(r"C:\workingcauldron\inputs\options\log\pltr\11_24_2025\pltr_quotedata.csv")
 
 SKIP_ROWS = 3            # First rows to skip before actual chain
 PLOT_TITLE = None        # Auto-set from ticker, unless overridden
@@ -102,14 +102,17 @@ def compute_parking_pressure(agg):
 # ============================ PLOT ===============================
 # ================================================================
 
-def plot_pressure(df, ticker, title, lw):
+def plot_pressure(df, ticker, title, lw, eq_strike=None):
     """
     Plot the gamma-weighted pressure curve across *full* strike range.
     """
     plt.figure(figsize=(10, 5))
     plt.plot(df["S_candidate"], df["net_gamma_pressure"], linewidth=lw)
 
+    plt.plot(df["S_candidate"], df["net_gamma_pressure"], linewidth=lw)
     plt.axhline(0, color="black", linestyle="--", alpha=0.5)
+    if eq_strike is not None:
+        plt.axvline(eq_strike, color="red", linestyle="--", alpha=0.7)
     plt.grid(alpha=GRID_ALPHA)
 
     if title:
@@ -140,14 +143,21 @@ def main():
 
     print("Computing pressure curve…")
     pressure_df = compute_parking_pressure(agg)
+    # --- Gamma-neutral zero-crossing detector ---
+    zero_idx = pressure_df["net_gamma_pressure"].abs().idxmin()
+    eq_strike = float(pressure_df.loc[zero_idx, "S_candidate"])
+    eq_val = float(pressure_df.loc[zero_idx, "net_gamma_pressure"])
+    print(f"Approx gamma-neutral level: {eq_strike:.2f} (net pressure {eq_val:.1f})")
 
     print("Plotting full strike range…")
     plt_obj = plot_pressure(
         pressure_df,
         ticker=ticker,
         title=PLOT_TITLE,
-        lw=LINE_WIDTH
+        lw=LINE_WIDTH,
+        eq_strike=eq_strike,        # <-- add this arg
     )
+
 
     if SAVE_PLOT:
         plt_obj.savefig(SAVE_PATH, dpi=150)

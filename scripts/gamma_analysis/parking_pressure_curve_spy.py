@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-parking_pressure_curve.py
+parking_pressure_curve_spy.py
 
 Standalone script to compute and plot the gamma-weighted
 net parking pressure curve for a SPY option chain CSV.

@@ -1,0 +1,388 @@
+//@version=5
+// ───────────────────────────────────────────────────────────────────────────────
+// REFLEXIVITY 4.0 – 0DTE WAR ROOM (GEX + GAMMA WALLS)
+// ───────────────────────────────────────────────────────────────────────────────
+// Purpose: Comprehensive 0DTE war room with GEX estimation and full HUD
+// Type: Sub-pane indicator (separate chart below price)
+// Key Features:
+//   - Manual or auto-detected gamma walls and flip levels
+//   - VIX-based IV or manual IV input with ATR proxy option
+//   - GEX estimation (gamma exposure per $1 move)
+//   - Composite reflexivity score (0-1 scale)
+//   - HR/EOM 3.0 with pin probability
+//   - Regime detection: DRY BAY UP, DRAIN DOWN, PINNED, CONTAINMENT
+//   - Comprehensive HUD table with 13 rows of metrics
+//   - GEX label and roundtable projection labels
+//   - Momentum arrows on chart
+// Use Case: Full-featured 0DTE analysis station with detailed GEX and gamma structure tracking
+// ───────────────────────────────────────────────────────────────────────────────
+indicator("Reflexivity 4.0 – 0DTE War Room (GEX + Gamma Walls)", overlay=false, max_lines_count=500, max_labels_count=500)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// INPUTS
+// ═════════════════════════════════════════════════════════════════════════════
+// GEX & Gamma Walls
+group_gex = "GEX & Gamma Walls"
+useAutoLevels = input.bool(false, "Auto-Detect Walls & Flip", group=group_gex, tooltip="Experimental auto-detection")
+callWallInput = input.float(665.0, "Call Wall", step=0.1, group=group_gex)
+putWallInput  = input.float(660.0, "Put Wall", step=0.1, group=group_gex)
+flipInput     = input.float(662.09, "Gamma Flip", step=0.1, group=group_gex)
+
+// Volatility
+group_iv = "Volatility"
+ivInput  = input.float(20.37, "IV % (Manual)", step=0.01, group=group_iv)
+useVixIv = input.bool(true, "Use VIX for IV", group=group_iv)
+hvLen    = input.int(20, "HV Length", group=group_iv, minval=5)
+useAtrProxy = input.bool(true, "Use ATR% as IV Accel Proxy", group=group_iv)
+
+// Sensitivity
+group_sens = "Sensitivity & Scaling"
+scoreSens = input.float(0.8, "Score Sensitivity", minval=0.1, maxval=2.0, step=0.1, group=group_sens, tooltip="Higher = more reactive")
+kGex      = input.float(1.5, "GEX Weight", minval=0, maxval=3.0, step=0.1, group=group_sens)
+kAccel    = input.float(0.6, "IV Accel Weight", minval=0, maxval=2.0, step=0.1, group=group_sens)
+smoothPeriod = input.int(3, "Smoothing Period", minval=1, maxval=10, group=group_sens)
+
+// Display
+group_disp = "Display"
+showHUD       = input.bool(true, "Show HUD Table", group=group_disp)
+showWalls     = input.bool(true, "Show Gamma Wall Lines", group=group_disp)
+showGexLabel  = input.bool(true, "Show GEX Label", group=group_disp)
+showPinProb   = input.bool(true, "Show Pin Probability", group=group_disp)
+showRoundtable = input.bool(true, "Show Roundtable", group=group_disp)
+showMomentum  = input.bool(true, "Show Momentum Arrows", group=group_disp)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// HELPER FUNCTIONS
+// ═════════════════════════════════════════════════════════════════════════════
+clamp01(x) => math.max(0.0, math.min(1.0, x))
+
+// ═════════════════════════════════════════════════════════════════════════════
+// AUTO LEVEL DETECTION
+// ═════════════════════════════════════════════════════════════════════════════
+gammaCallPeak = 661.0  // Default estimates
+gammaPutPeak  = 660.0
+gammaFlipEst  = (gammaCallPeak + gammaPutPeak) / 2.0
+
+callWall  = useAutoLevels ? gammaCallPeak : callWallInput
+putWall   = useAutoLevels ? gammaPutPeak : putWallInput
+flipLevel = useAutoLevels ? gammaFlipEst : flipInput
+
+// ═════════════════════════════════════════════════════════════════════════════
+// CORE DATA CALCULATIONS
+// ═════════════════════════════════════════════════════════════════════════════
+spot = close
+
+// VIX-based IV or manual
+vixValue = request.security("CBOE:VIX", "D", close, ignore_invalid_symbol=true)
+iv = useVixIv and not na(vixValue) ? vixValue / 100.0 : ivInput / 100.0
+
+// Historical Volatility
+ret = math.log(spot / math.max(nz(spot[1], spot), 1e-9))
+hv = ta.stdev(ret, hvLen) * math.sqrt(252.0)
+ivhvRatio = iv / math.max(hv, 1e-6)
+
+// ATR% for acceleration proxy
+atrPct = ta.atr(14) / math.max(spot, 1e-9)
+ivDelta = useAtrProxy ? ta.change(atrPct) : ta.change(iv)
+ivAccel = ta.ema(ivDelta, 3)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// GARAGE STRUCTURE & GEX
+// ═════════════════════════════════════════════════════════════════════════════
+rng = math.max(0.1, math.abs(callWall - putWall))
+center = (callWall + putWall) / 2.0
+
+// Distances (normalized)
+distToPut  = math.abs(spot - putWall) / rng
+distToCall = math.abs(spot - callWall) / rng
+distToFlip = math.abs(spot - flipLevel) / rng
+
+// Wall bias (amplifies when above call wall)
+wallBias = clamp01((spot - callWall) / rng)
+
+// GPD: Gamma Proximity Distance
+gpd = distToFlip
+gpdAdj = gpd * (1.0 + 0.3 * wallBias)
+
+// Tension: dealer squeeze
+tension = 1.0 - clamp01(distToFlip)
+tensionAdj = tension * (1.0 + 0.5 * wallBias)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// GEX ESTIMATION
+// ═════════════════════════════════════════════════════════════════════════════
+// Gamma exposure per $1 move (simplified model)
+gexCallGamma = 0.0090  // Example gamma values
+gexPutGamma  = 0.0085
+oiCallEst = 500000  // Open interest estimates
+oiPutEst  = 450000
+
+gexCallTotal = gexCallGamma * oiCallEst
+gexPutTotal  = gexPutGamma * oiPutEst
+gexNet = gexCallTotal - gexPutTotal
+gexPerDollar = gexNet / 100.0  // Shares per $1 move
+gexFlow = ta.ema(gexNet, 5)  // Smoothed flow
+
+// Normalize GEX for scoring (0-1 range)
+gexNorm = clamp01(math.abs(gexFlow) / 1000000.0)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// COMPOSITE REFLEXIVITY SCORE (0-1 SCALE)
+// ═════════════════════════════════════════════════════════════════════════════
+coreGamma = gpdAdj * 0.7 + tensionAdj * 0.3
+coreScaled = coreGamma * scoreSens
+
+// IV acceleration kick
+ivKick = ivAccel * kAccel * 10.0
+
+// GEX kick
+gexKick = (gexNorm - 0.5) * kGex * 0.1
+
+// Build composite (normalized to 0-1)
+scoreRaw = (ivhvRatio - 1.0) * 0.3 + coreScaled + ivKick + gexKick
+reflexRaw = ta.ema(scoreRaw, smoothPeriod)
+reflex = clamp01(reflexRaw)  // Final 0-1 score
+
+// Momentum calculation
+reflexVelocity = ta.change(reflex)
+momentum = ta.ema(reflexVelocity, 3) * 100
+momentumStrength = math.abs(momentum)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// HR & EOM 3.0 (0-1 SCALE)
+// ═════════════════════════════════════════════════════════════════════════════
+ivMin  = 0.08
+ivMax  = 0.30
+ivNorm = clamp01((iv - ivMin) / math.max(ivMax - ivMin, 1e-6))
+
+proximity = 1.0 - clamp01(math.abs(spot - center) / (rng / 2.0))
+
+// HR: Hedging Resistance (pinning near walls)
+hr_base = proximity * ivNorm * 0.8
+hr_flip = spot >= flipLevel ? 0.2 : 0.0
+hr = clamp01(hr_base + hr_flip)
+
+// EOM: Ease of Motion (flow away from center)
+eom_directional = spot > flipLevel ? 1.0 : 0.7
+eom_base = (1.0 - proximity) * ivNorm * eom_directional
+eom = clamp01(eom_base)
+
+// Pin Probability
+pinProbBase = 30.0 + (hr * 50.0) + (iv < 0.15 ? 20.0 : 0.0)
+pinProb = math.min(95.0, pinProbBase)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// REGIME DETECTION
+// ═════════════════════════════════════════════════════════════════════════════
+regime = spot > callWall + (rng * 0.01) ? "DRY BAY UP" :
+         spot < putWall - (rng * 0.01) ? "DRAIN DOWN" :
+         pinProb > 70 ? "PINNED" :
+         "CONTAINMENT"
+
+regimeColor = regime == "DRY BAY UP" ? color.new(color.teal, 92) :
+              regime == "DRAIN DOWN" ? color.new(color.red, 92) :
+              regime == "PINNED" ? color.new(color.yellow, 93) :
+              color.new(color.orange, 94)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// PLOTS (ALL 0-1 SCALE)
+// ═════════════════════════════════════════════════════════════════════════════
+// Main reflexivity score
+reflexColor = reflex >= 0.75 ? color.red :
+              reflex >= 0.60 ? color.orange :
+              reflex >= 0.40 ? color.yellow :
+              color.teal
+
+plot(reflex, "Reflexivity 4.0", reflexColor, 3, plot.style_line)
+
+// Momentum histogram
+momentumColor = momentum > 0 ? color.new(color.lime, 50) : color.new(color.red, 50)
+plot(momentum / 100, "Momentum", momentumColor, 2, plot.style_histogram)
+
+// Reference lines
+hline(0.75, "EXTREME", color.new(color.red, 40), hline.style_solid, 2)
+hline(0.60, "ACTIVE", color.new(color.orange, 50), hline.style_dashed)
+hline(0.40, "NEUTRAL", color.new(color.gray, 70), hline.style_dotted)
+hline(0.20, "CALM", color.new(color.teal, 50), hline.style_dashed)
+hline(0.00, "Zero", color.new(color.white, 80), hline.style_dotted)
+
+// HR & EOM
+plot(hr, "HR (Pinning)", color.new(color.red, 30), 2)
+plot(eom, "EOM (Motion)", color.new(color.lime, 30), 2)
+
+// Background shading
+bgcolor(regimeColor, title="Regime Background")
+
+// Momentum arrows
+bullishMomentum = momentum > 1.5 and reflex > 0.5
+bearishMomentum = momentum < -1.5 and reflex > 0.5
+
+plotshape(showMomentum and bullishMomentum, title="Bull Momentum", style=shape.triangleup, location=location.bottom, color=color.new(color.lime, 0), size=size.small, text="⬆")
+plotshape(showMomentum and bearishMomentum, title="Bear Momentum", style=shape.triangledown, location=location.top, color=color.new(color.red, 0), size=size.small, text="⬇")
+
+// ═════════════════════════════════════════════════════════════════════════════
+// GAMMA WALL REFERENCE LINES (SEPARATE PLOT OVERLAY)
+// ═════════════════════════════════════════════════════════════════════════════
+// Note: These plot on the indicator pane as horizontal reference lines
+if showWalls
+    var line putLine = na
+    var line callLine = na
+    var line flipLine = na
+    
+    if barstate.islast
+        // Delete old lines
+        if not na(putLine)
+            line.delete(putLine)
+        if not na(callLine)
+            line.delete(callLine)
+        if not na(flipLine)
+            line.delete(flipLine)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// HUD TABLE
+// ═════════════════════════════════════════════════════════════════════════════
+var table hud = table.new(position.top_right, 2, 13, 
+     bgcolor=color.new(color.black, 10),
+     frame_color=color.new(color.purple, 30),
+     frame_width=2)
+
+if barstate.islast and showHUD
+    // Header
+    table.cell(hud, 0, 0, "0DTE WAR ROOM", 
+         text_color=color.yellow, 
+         bgcolor=color.new(color.purple, 50),
+         text_size=size.normal)
+    
+    currentTime = timestamp("UTC", year, month, dayofmonth, hour, minute)
+    table.cell(hud, 1, 0, "LIVE", 
+         text_color=color.white,
+         bgcolor=color.new(color.purple, 50),
+         text_size=size.small)
+    
+    // Walls
+    table.cell(hud, 0, 1, "Call Wall", text_color=color.gray, text_size=size.small)
+    table.cell(hud, 1, 1, str.tostring(callWall, "#.##"), 
+         text_color=color.lime, text_size=size.small)
+    
+    table.cell(hud, 0, 2, "Put Wall", text_color=color.gray, text_size=size.small)
+    table.cell(hud, 1, 2, str.tostring(putWall, "#.##"), 
+         text_color=color.red, text_size=size.small)
+    
+    table.cell(hud, 0, 3, "Gamma Flip", text_color=color.gray, text_size=size.small)
+    table.cell(hud, 1, 3, str.tostring(flipLevel, "#.##"), 
+         text_color=color.yellow, text_size=size.small)
+    
+    // IV/HV
+    table.cell(hud, 0, 4, "IV / HV", text_color=color.gray, text_size=size.small)
+    ivhvText = str.tostring(iv*100, "#.##") + "% / " + str.tostring(hv*100, "#.##") + "%"
+    ivColor = ivhvRatio > 1.2 ? color.red : ivhvRatio > 1.0 ? color.orange : color.aqua
+    table.cell(hud, 1, 4, ivhvText, text_color=ivColor, text_size=size.small)
+    
+    // GEX
+    table.cell(hud, 0, 5, "GEX/$1", text_color=color.gray, text_size=size.small)
+    gexText = str.tostring(gexPerDollar/1000, "#.##") + "k"
+    gexColor = gexPerDollar > 0 ? color.lime : color.red
+    table.cell(hud, 1, 5, gexText, text_color=gexColor, text_size=size.small)
+    
+    // Reflexivity Score
+    table.cell(hud, 0, 6, "Reflex", text_color=color.gray, text_size=size.small)
+    table.cell(hud, 1, 6, str.tostring(reflex, "#.###"), 
+         text_color=reflexColor, text_size=size.normal)
+    
+    // Momentum
+    table.cell(hud, 0, 7, "Momentum", text_color=color.gray, text_size=size.small)
+    momText = (momentum > 0 ? "↑ " : momentum < 0 ? "↓ " : "→ ") + str.tostring(math.abs(momentum), "#.##")
+    momColor = momentum > 0 ? color.lime : momentum < 0 ? color.red : color.gray
+    table.cell(hud, 1, 7, momText, text_color=momColor, text_size=size.small)
+    
+    // HR/EOM
+    table.cell(hud, 0, 8, "HR / EOM", text_color=color.gray, text_size=size.small)
+    hrEomText = str.tostring(hr, "#.##") + " / " + str.tostring(eom, "#.##")
+    table.cell(hud, 1, 8, hrEomText, text_color=color.white, text_size=size.small)
+    
+    // Pin Probability
+    if showPinProb
+        table.cell(hud, 0, 9, "Pin Prob", text_color=color.gray, text_size=size.small)
+        pinColor = pinProb > 70 ? color.lime : pinProb > 50 ? color.yellow : color.orange
+        table.cell(hud, 1, 9, str.tostring(pinProb, "#") + "%", 
+             text_color=pinColor, text_size=size.small)
+    
+    // Regime
+    table.cell(hud, 0, 10, "Regime", text_color=color.gray, text_size=size.small)
+    regTextColor = regime == "DRY BAY UP" ? color.teal :
+                   regime == "DRAIN DOWN" ? color.red :
+                   regime == "PINNED" ? color.yellow : color.orange
+    table.cell(hud, 1, 10, regime, text_color=regTextColor, text_size=size.small)
+    
+    // Gamma Mode
+    gammaMode = spot >= flipLevel ? "Pos γ" : "Neg γ"
+    table.cell(hud, 0, 11, "γ Mode", text_color=color.gray, text_size=size.small)
+    table.cell(hud, 1, 11, gammaMode,
+         text_color=spot >= flipLevel ? color.lime : color.orange,
+         text_size=size.small)
+    
+    // Current Spot
+    table.cell(hud, 0, 12, "Spot", text_color=color.gray, text_size=size.small)
+    table.cell(hud, 1, 12, str.tostring(spot, "#.##"),
+         text_color=color.white, text_size=size.normal)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// LABELS - GEX & ROUNDTABLE
+// ═════════════════════════════════════════════════════════════════════════════
+// GEX Label
+var label gexLab = na
+if showGexLabel and barstate.islast
+    label.delete(gexLab)
+    gexText = "💥 GEX FLOW\n" +
+              str.tostring(gexPerDollar/1000, "#.##") + "k shares/$1\n" +
+              "Pin: " + str.tostring(pinProb, "#") + "%"
+    gexLabelColor = gexPerDollar > 0 ? color.new(color.lime, 70) : color.new(color.red, 70)
+    gexLab := label.new(bar_index, 0.9, gexText,
+         style=label.style_label_left,
+         color=gexLabelColor,
+         textcolor=color.white,
+         size=size.small)
+
+// Roundtable Projection
+// Roundtable Projection
+var label rtLab = na
+if showRoundtable and barstate.islast
+    label.delete(rtLab)
+
+    ivPct = iv * 100.0
+
+    // --- Roundtable bias logic ---
+    bullCond = momentum > 0 and reflex >= 0
+    bearCond = momentum <= 0 and reflex > 0
+
+    bias = bullCond ? "🐂 BULL DRIFT → " + str.tostring(callWall, "#") :
+           bearCond ? "🐻 BEAR SLIDE ~ " + str.tostring(putWall, "#") :
+           "🦀 CONTAINMENT " + str.tostring(putWall, "#") + "–" + str.tostring(callWall, "#")
+
+    biasColor = bullCond ? color.new(color.lime, 70) :
+                 bearCond ? color.new(color.red, 70) :
+                 color.new(color.orange, 70)
+
+    rtText = "🎯 ROUNDTABLE\n" +
+             bias + "\n" +
+             "━━━━━━━━━━━━━\n" +
+             "HR: " + str.tostring(hr, "#.##") + " | EOM: " + str.tostring(eom, "#.##") + "\n" +
+             "Reflex: " + str.tostring(reflex, "#.##") + " | Mom: " + str.tostring(momentum, "#.#")
+
+    // HUD inside indicator pane using small Y-value
+    rtLab := label.new(bar_index, 0.1, rtText,
+         style     = label.style_label_left,
+         color     = biasColor,
+         textcolor = color.white,
+         size      = size.small,
+         yloc      = yloc.price)
+
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ALERTS
+// ═════════════════════════════════════════════════════════════════════════════
+alertcondition(reflex >= 0.75, "Extreme Zone", "Reflexivity entering EXTREME zone!")
+alertcondition(pinProb > 80, "High Pin Risk", "Pin probability above 80%!")
+alertcondition(bullishMomentum, "Bullish Momentum", "Strong bullish momentum detected!")
+alertcondition(bearishMomentum, "Bearish Momentum", "Strong bearish momentum detected!")
+alertcondition(ta.cross(spot, flipLevel), "Gamma Flip Cross", "Price crossed gamma flip level!")

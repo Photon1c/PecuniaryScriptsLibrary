@@ -1,0 +1,511 @@
+//@version=5
+// ───────────────────────────────────────────────────────────────────────────────
+// REFLEXIVITY INDEX 4.0 - MODULAR ARCHITECTURE
+// ───────────────────────────────────────────────────────────────────────────────
+// Purpose: Modularized version of Reflexivity Index 3.2 with clean architecture
+// Type: Sub-pane indicator (separate chart below price)
+// Architecture: Modular design with separate engines for volatility, gamma, 
+//               pressure, reflexivity, momentum, regime, signals, and rendering
+// ───────────────────────────────────────────────────────────────────────────────
+indicator("Reflexivity Index 4.0 - Modular", overlay=false, max_lines_count=500)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// INPUTS
+// ═════════════════════════════════════════════════════════════════════════════
+// Auto-Calculate Settings
+autoCalcLevels = input.bool(false, "Auto-Calculate Gamma Levels", group="Auto-Calc", tooltip="Use price action to estimate key levels")
+volLookback   = input.int(20, "Volume/Range Lookback", group="Auto-Calc", minval=5, maxval=100)
+strikeSpacing = input.float(5.0, "Strike Spacing Estimate", group="Auto-Calc", minval=1.0, step=0.5, tooltip="Typical distance between strikes")
+
+// Manual Override (used when auto-calc is off)
+flipLevel = input.float(665.18, "Manual: Gamma Flip Level", group="Manual Gamma", step=0.01)
+callWall  = input.float(665.00, "Manual: Call Wall", group="Manual Gamma", step=0.01)
+putWall   = input.float(660.00, "Manual: Put Wall", group="Manual Gamma", step=0.01)
+
+// Volatility Settings
+useDynHV  = input.bool(true, "Use Dynamic HV", group="Volatility", tooltip="Calculate HV from price data")
+hvLen     = input.int(131, "HV Length", group="Volatility", minval=10)
+useVixIv  = input.bool(true, "Use VIX as IV Source", group="Volatility", tooltip="Pull daily IV proxy from CBOE:VIX")
+ivInput   = input.float(19.47, "Manual: Implied Volatility %", group="Volatility", step=0.01)
+hvInput   = input.float(14.66, "Manual: Historical Volatility %", group="Volatility", step=0.01)
+useAtrProxy = input.bool(true, "Use ATR% as IV Proxy", group="Volatility", tooltip="Estimate IV from ATR when manual IV unavailable")
+
+// Component Weights
+alphaBias = input.float(0.30, "α: GPD Bias", group="Weights", minval=0, step=0.05)
+betaBias  = input.float(0.50, "β: Tension Bias", group="Weights", minval=0, step=0.05)
+wTension  = input.float(0.65, "Tension Weight", group="Weights", minval=0, maxval=1, step=0.05)
+kAccel    = input.float(0.50, "κ: IV Acceleration", group="Weights", minval=0, step=0.05)
+
+// Smoothing
+nAccel    = input.int(3, "IV Accel Period", group="Smoothing", minval=1)
+nSmooth   = input.int(3, "Score Smooth Period", group="Smoothing", minval=1)
+sigConfirm= input.int(1, "Signal Confirmation Bars", group="Smoothing", minval=0, maxval=3)
+
+// Scaling
+scoreSens = input.float(1.0, "Score Sensitivity", group="Scaling", minval=0.1, maxval=3.0, step=0.1, tooltip="Multiplier for score amplitude")
+
+// Display
+showHUD         = input.bool(true, "Show Info Table", group="Display")
+showMarks       = input.bool(true, "Show Signals", group="Display")
+showVerbose     = input.bool(false, "Show Verbose Label", group="Display")
+showDiagnostics = input.bool(false, "Show Debug Plots", group="Display")
+showRoundtable  = input.bool(true, "Show Roundtable Projection", group="Display")
+
+// Sweet Spot Gauge
+enableSweetSpotGauge = input.bool(true, "Enable Sweet Spot Gauge", group="Sweet Spot Gauge", tooltip="Show PUT/CALL sweet spot bias indicator")
+ivRiseThresh         = input.float(0.002, "IV Rise Threshold", group="Sweet Spot Gauge", minval=0.0001, step=0.0001, tooltip="IV change threshold for PUT sweet spot (0.002 = 0.2% per bar)")
+ivFallThresh         = input.float(0.002, "IV Fall Threshold", group="Sweet Spot Gauge", minval=0.0001, step=0.0001, tooltip="IV change threshold for CALL sweet spot")
+ivHvSpreadThresh     = input.float(0.03, "IV-HV Spread Threshold", group="Sweet Spot Gauge", minval=0.01, step=0.01, tooltip="Minimum IV-HV spread for sweet spot (0.03 = 3%)")
+sweetSpotSmooth      = input.int(3, "Sweet Spot Smooth Period", group="Sweet Spot Gauge", minval=1, tooltip="EMA smoothing for sweet spot score")
+
+// ═════════════════════════════════════════════════════════════════════════════
+// HELPER FUNCTIONS
+// ═════════════════════════════════════════════════════════════════════════════
+clamp01(x) => math.max(0.0, math.min(1.0, x))
+
+confirmedCross(src, level, dir, conf) =>
+    cross = dir > 0 ? ta.crossover(src, level) : ta.crossunder(src, level)
+    if conf == 0
+        cross
+    else if conf == 1
+        cross and (dir > 0 ? src >= level : src <= level)
+    else if conf == 2
+        cross and (dir > 0 ? src >= level and src[1] >= level : src <= level and src[1] <= level)
+    else
+        cross and (dir > 0 ? src >= level and src[1] >= level and src[2] >= level : src <= level and src[1] <= level and src[2] <= level)
+
+roundToStrike(price, spacing) => na(price) or na(spacing) or spacing <= 0 ? price : math.round(price / spacing) * spacing
+
+// Global var declarations for renderers (must be before functions that use them)
+var table hud = table.new(position.middle_right, 2, 13, bgcolor=color.new(color.black, 15), frame_color=color.new(color.gray, 50), frame_width=2, border_width=1, border_color=color.new(color.gray, 70))
+var label hudLabel = na
+var label roundtableLabel = na
+
+calcGammaLevels(spot, volLookback, strikeSpacing) =>
+    var float autoFlip = na
+    var float autoCallWall = na
+    var float autoPutWall = na
+    
+    vwap20 = nz(ta.vwap(spot), spot)
+    highVol = nz(ta.highest(high, volLookback), high)
+    lowVol  = nz(ta.lowest(low, volLookback), low)
+    
+    autoFlip     := roundToStrike(vwap20, strikeSpacing)
+    autoCallWall := roundToStrike(highVol, strikeSpacing)
+    autoPutWall  := roundToStrike(lowVol, strikeSpacing)
+    
+    if not na(autoFlip) and not na(autoCallWall) and autoFlip >= autoCallWall
+        autoFlip := autoCallWall - strikeSpacing
+    if not na(autoFlip) and not na(autoPutWall) and autoFlip <= autoPutWall
+        autoFlip := autoPutWall + strikeSpacing
+        
+    [autoFlip, autoCallWall, autoPutWall]
+
+// ═════════════════════════════════════════════════════════════════════════════
+// VOLATILITY ENGINE
+// ═════════════════════════════════════════════════════════════════════════════
+VolatilityEngine(spot, useDynHV, hvLen, hvInput, useVixIv, ivInput, useAtrProxy, nAccel) =>
+    // Historical Volatility
+    ret  = math.log(spot / math.max(nz(spot[1], spot), 1e-9))
+    hvD  = ta.stdev(ret, hvLen) * math.sqrt(252.0)
+    hv   = useDynHV ? hvD : hvInput / 100.0
+    
+    // IV estimation
+    atrPct        = ta.atr(14) / math.max(spot, 1e-9)
+    atrAnnualized = atrPct * math.sqrt(252.0)
+    vixRaw        = request.security("CBOE:VIX", "D", close)
+    vixIv         = na(vixRaw) ? 0.0 : vixRaw / 100.0
+    
+    ivManual  = ivInput / 100.0
+    ivProxy   = useAtrProxy ? atrAnnualized : ivManual
+    ivCore    = useVixIv ? (na(vixRaw) ? ivProxy : vixIv) : ivProxy
+    iv        = math.max(nz(ivCore, ivManual), 0.01)
+    
+    // Momentum base
+    momBase  = math.max(iv / math.max(hv, 1e-9), 0.1)
+    
+    // IV acceleration
+    ivDelta  = ta.change(iv)
+    ivAccel  = ta.ema(ivDelta, nAccel)
+    
+    // Price ROC
+    priceRoc = ta.roc(spot, 5)
+    
+    [iv, hv, momBase, ivAccel, priceRoc, atrPct]
+
+// ═════════════════════════════════════════════════════════════════════════════
+// GAMMA ENGINE
+// ═════════════════════════════════════════════════════════════════════════════
+GammaEngine(spot, autoCalcLevels, volLookback, strikeSpacing, flipLevel, callWall, putWall, alphaBias, betaBias) =>
+    // Auto-calculate gamma levels
+    [autoFlip, autoCallWall, autoPutWall] = calcGammaLevels(spot, volLookback, strikeSpacing)
+    
+    flip_eff = autoCalcLevels ? autoFlip     : flipLevel
+    cw_eff   = autoCalcLevels ? autoCallWall : callWall
+    pw_eff   = autoCalcLevels ? autoPutWall  : putWall
+    
+    // Gamma structure
+    rng = math.max(1.0, math.abs(cw_eff - pw_eff))
+    
+    wallBias = clamp01((cw_eff - spot) / rng)
+    
+    gpdRaw      = (spot - flip_eff) / rng
+    gpd         = math.abs(gpdRaw)
+    gpdDirection= gpdRaw >= 0 ? 1 : -1
+    gpdAdj      = gpd * (1.0 + alphaBias * wallBias)
+    
+    tension    = clamp01(math.abs(spot - flip_eff) / rng)
+    tensionAdj = tension * (1.0 + betaBias * wallBias)
+    
+    [flip_eff, cw_eff, pw_eff, rng, wallBias, gpd, gpdAdj, gpdDirection, tension, tensionAdj]
+
+// ═════════════════════════════════════════════════════════════════════════════
+// PRESSURE ENGINE
+// ═════════════════════════════════════════════════════════════════════════════
+PressureEngine(spot, iv, pw_eff, cw_eff, rng) =>
+    ivMin  = 0.08
+    ivMax  = 0.30
+    ivNorm = clamp01((iv - ivMin) / math.max(ivMax - ivMin, 1e-6))
+    
+    center      = (pw_eff + cw_eff) / 2.0
+    distToCenter= math.abs(spot - center) / math.max(rng / 2.0, 1e-9)
+    proximity   = 1.0 - clamp01(distToCenter)
+    
+    hr_raw = (1.0 - proximity) * ivNorm
+    hr     = clamp01(hr_raw)
+    
+    directionalBias = clamp01((spot - pw_eff) / rng)
+    eom_raw         = proximity * ivNorm * directionalBias
+    eom             = clamp01(eom_raw)
+    
+    [hr, hr_raw, eom, eom_raw]
+
+// ═════════════════════════════════════════════════════════════════════════════
+// REFLEXIVITY ENGINE
+// ═════════════════════════════════════════════════════════════════════════════
+ReflexivityEngine(gpdAdj, tensionAdj, wTension, scoreSens, momBase, ivAccel, kAccel, priceRoc, nSmooth) =>
+    coreShape  = gpdAdj * (wTension * tensionAdj + (1.0 - wTension))
+    coreScaled = coreShape * scoreSens
+    ivKick     = ivAccel * kAccel * 50.0
+    
+    rawScore    = (momBase - 1.0) * 0.3 + coreScaled + ivKick + (priceRoc / 100.0)
+    reflex21Raw = ta.ema(rawScore, nSmooth)
+    reflex21    = clamp01(reflex21Raw * 0.5 + 0.5)
+    
+    [reflex21, reflex21Raw, rawScore, coreShape, coreScaled, ivKick]
+
+// ═════════════════════════════════════════════════════════════════════════════
+// MOMENTUM ENGINE
+// ═════════════════════════════════════════════════════════════════════════════
+MomentumEngine(reflex21) =>
+    reflexVelocity = ta.change(reflex21)
+    reflexAccel    = ta.change(reflexVelocity)
+    momentum       = ta.ema(reflexVelocity, 3) * 100
+    
+    direction = momentum > 0.5 ? "↑ BULLISH" : momentum < -0.5 ? "↓ BEARISH" : "↔ NEUTRAL"
+    momentumStrength = math.abs(momentum)
+    momentumColor    = momentum > 0 ? color.new(color.lime, 30) : momentum < 0 ? color.new(color.red, 30) : color.new(color.gray, 50)
+    
+    [momentum, direction, momentumStrength, momentumColor, reflexVelocity, reflexAccel]
+
+// ═════════════════════════════════════════════════════════════════════════════
+// REGIME ENGINE
+// ═════════════════════════════════════════════════════════════════════════════
+RegimeEngine(spot, cw_eff, pw_eff, flip_eff) =>
+    regime      = spot > cw_eff ? "DRY BAY" : spot < pw_eff ? "DRAIN TILT" : "CONTAINMENT"
+    regimeColor = regime == "DRY BAY" ? color.new(color.teal, 92) : regime == "DRAIN TILT" ? color.new(color.red, 92) : color.new(color.yellow, 92)
+    
+    garageState = flip_eff < pw_eff ? "Flip < Put" : flip_eff > cw_eff ? "Flip > Call" : "Inside"
+    
+    [regime, regimeColor, garageState]
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SIGNAL ENGINE
+// ═════════════════════════════════════════════════════════════════════════════
+SignalEngine(eom, hr, sigConfirm) =>
+    eomLongThresh  = 0.40
+    eomShortThresh = 0.35
+    hrHighThresh   = 0.50
+    hrLowThresh    = 0.40
+    
+    longCond  = confirmedCross(eom, eomLongThresh, 1, sigConfirm) and hr < hrLowThresh
+    shortCond = confirmedCross(eom, eomShortThresh, -1, sigConfirm) and hr > hrHighThresh
+    
+    [longCond, shortCond]
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SWEET SPOT GAUGE ENGINE
+// ═════════════════════════════════════════════════════════════════════════════
+SweetSpotGaugeEngine(spot, flip_eff, pw_eff, cw_eff, iv, hv, ivDelta, gammaMode, regime, ivRiseThresh, ivFallThresh, ivHvSpreadThresh, sweetSpotSmooth) =>
+    // Calculate IV-HV spread
+    ivHvSpread = iv - hv
+    
+    // PUT SWEET SPOT conditions (downside convexity zone)
+    putCond1 = ivDelta > ivRiseThresh  // IV rising
+    putCond2 = spot < flip_eff  // Below gamma flip
+    putCond3 = gammaMode == "Neg γ" or regime == "DRAIN TILT"  // Negative gamma or downside tilt
+    putCond4 = ivHvSpread >= ivHvSpreadThresh  // IV > HV by threshold (fear premium)
+    
+    // Score PUT conditions (0-1 scale)
+    putScore = 0.0
+    if putCond1
+        putScore += 0.3
+    if putCond2
+        putScore += 0.3
+    if putCond3
+        putScore += 0.2
+    if putCond4
+        putScore += 0.2
+    putScore := clamp01(putScore)
+    
+    // CALL SWEET SPOT conditions (upside drift / post-crush zone)
+    callCond1 = ivDelta < -ivFallThresh  // IV falling / being crushed
+    callCond2 = spot > flip_eff  // Above gamma flip
+    callCond3 = gammaMode == "Pos γ" or regime == "DRY BAY" or regime == "CONTAINMENT"  // Positive gamma or controlled upside
+    callCond4 = ivHvSpread > 0.0  // IV > HV (but not exploding)
+    
+    // Score CALL conditions (0-1 scale)
+    callScore = 0.0
+    if callCond1
+        callScore += 0.3
+    if callCond2
+        callScore += 0.3
+    if callCond3
+        callScore += 0.2
+    if callCond4
+        callScore += 0.2
+    callScore := clamp01(callScore)
+    
+    // Determine bias
+    sweetSpotBias = "NEUTRAL"
+    sweetSpotColor = color.new(color.gray, 60)
+    
+    if putScore > callScore and putScore >= 0.5
+        sweetSpotBias := "PUT SWEET SPOT"
+        sweetSpotColor := color.new(color.red, 30)
+    else if callScore > putScore and callScore >= 0.5
+        sweetSpotBias := "CALL SWEET SPOT"
+        sweetSpotColor := color.new(color.lime, 30)
+    
+    // Sweet spot score is max of put/call scores, smoothed
+    rawScore = math.max(putScore, callScore)
+    sweetSpotScore = ta.ema(rawScore, sweetSpotSmooth)
+    sweetSpotScore := clamp01(sweetSpotScore)
+    
+    [sweetSpotScore, sweetSpotBias, sweetSpotColor]
+
+// ═════════════════════════════════════════════════════════════════════════════
+// HUD RENDERER
+// ═════════════════════════════════════════════════════════════════════════════
+// Note: Renderer logic at global scope to modify var variables
+// This function is called but logic executes at global scope
+HUDRenderer(showHUD, showVerbose, autoCalcLevels, spot, flip_eff, cw_eff, pw_eff, iv, hv, reflex21, momentum, direction, momentumColor, hr, eom, regime, regimeColor, garageState, momBase, gpdAdj, col) =>
+    array.new<float>()  // Function exists for modularity but logic is at global scope
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ROUNDTABLE RENDERER
+// ═════════════════════════════════════════════════════════════════════════════
+// Note: Renderer logic at global scope to modify var variables
+// This function is called but logic executes at global scope
+RoundtableRenderer(showRoundtable, iv, strikeSpacing, cw_eff, pw_eff, center) =>
+    array.new<float>()  // Function exists for modularity but logic is at global scope
+
+// ═════════════════════════════════════════════════════════════════════════════
+// MAIN EXECUTION
+// ═════════════════════════════════════════════════════════════════════════════
+spot = close
+
+// Volatility Engine
+[iv, hv, momBase, ivAccel, priceRoc, atrPct] = VolatilityEngine(spot, useDynHV, hvLen, hvInput, useVixIv, ivInput, useAtrProxy, nAccel)
+
+// Calculate raw IV delta for Sweet Spot Gauge
+ivDelta = ta.change(iv)
+
+// Gamma Engine
+[flip_eff, cw_eff, pw_eff, rng, wallBias, gpd, gpdAdj, gpdDirection, tension, tensionAdj] = GammaEngine(spot, autoCalcLevels, volLookback, strikeSpacing, flipLevel, callWall, putWall, alphaBias, betaBias)
+
+// Pressure Engine
+[hr, hr_raw, eom, eom_raw] = PressureEngine(spot, iv, pw_eff, cw_eff, rng)
+
+// Reflexivity Engine
+[reflex21, reflex21Raw, rawScore, coreShape, coreScaled, ivKick] = ReflexivityEngine(gpdAdj, tensionAdj, wTension, scoreSens, momBase, ivAccel, kAccel, priceRoc, nSmooth)
+
+// Momentum Engine
+[momentum, direction, momentumStrength, momentumColor, reflexVelocity, reflexAccel] = MomentumEngine(reflex21)
+
+// Regime Engine
+[regime, regimeColor, garageState] = RegimeEngine(spot, cw_eff, pw_eff, flip_eff)
+
+// Signal Engine
+[longCond, shortCond] = SignalEngine(eom, hr, sigConfirm)
+
+// Gamma mode for Sweet Spot Gauge
+gammaMode = spot >= flip_eff ? "Pos γ" : "Neg γ"
+
+// Sweet Spot Gauge Engine
+float sweetSpotScore = 0.0
+string sweetSpotBias = "NEUTRAL"
+color sweetSpotColor = color.new(color.gray, 60)
+
+if enableSweetSpotGauge
+    [sweetSpotScore, sweetSpotBias, sweetSpotColor] = SweetSpotGaugeEngine(spot, flip_eff, pw_eff, cw_eff, iv, hv, ivDelta, gammaMode, regime, ivRiseThresh, ivFallThresh, ivHvSpreadThresh, sweetSpotSmooth)
+
+// Color calculation for plots and HUD
+col = reflex21 >= 0.75 ? color.red : reflex21 >= 0.60 ? color.orange : reflex21 >= 0.40 ? color.yellow : color.teal
+
+// HUD Renderer (function call for modularity, logic at global scope)
+float[] dummyHud = HUDRenderer(showHUD, showVerbose, autoCalcLevels, spot, flip_eff, cw_eff, pw_eff, iv, hv, reflex21, momentum, direction, momentumColor, hr, eom, regime, regimeColor, garageState, momBase, gpdAdj, col)
+
+// HUD Renderer Logic (global scope to modify var variables)
+if barstate.islast and showHUD
+    table.cell(hud, 0, 0, "REFLEXIVITY 4.0", text_color=color.white, bgcolor=color.new(color.blue, 20), text_size=size.normal)
+    table.cell(hud, 1, 0, direction, text_color=momentum > 0 ? color.lime : momentum < 0 ? color.red : color.gray, bgcolor=color.new(color.blue, 20), text_size=size.small)
+    
+    table.cell(hud, 0, 1, "Mode", text_color=color.gray, text_size=size.small)
+    modeText = autoCalcLevels ? "AUTO" : "MANUAL"
+    table.cell(hud, 1, 1, modeText, text_color=autoCalcLevels ? color.aqua : color.orange, text_size=size.small)
+    
+    table.cell(hud, 0, 2, "Garage", text_color=color.gray, text_size=size.small)
+    txtCC = garageState == "Inside" ? "✓ OK" : garageState == "Flip > Call" ? "↑ Beam" : "↓ Floor"
+    colCC = garageState == "Inside" ? color.green : color.orange
+    table.cell(hud, 1, 2, txtCC, text_color=colCC, text_size=size.small)
+    
+    table.cell(hud, 0, 3, "Call Wall", text_color=color.gray, text_size=size.small)
+    table.cell(hud, 1, 3, str.tostring(cw_eff, "#.##"), text_color=color.lime, text_size=size.small)
+    
+    table.cell(hud, 0, 4, "Flip", text_color=color.gray, text_size=size.small)
+    table.cell(hud, 1, 4, str.tostring(flip_eff, "#.##"), text_color=color.yellow, text_size=size.small)
+    
+    table.cell(hud, 0, 5, "Put Wall", text_color=color.gray, text_size=size.small)
+    table.cell(hud, 1, 5, str.tostring(pw_eff, "#.##"), text_color=color.red, text_size=size.small)
+    
+    table.cell(hud, 0, 6, "IV / HV", text_color=color.gray, text_size=size.small)
+    ivhvText = str.tostring(iv * 100, "#.##") + "% / " + str.tostring(hv * 100, "#.##") + "%"
+    table.cell(hud, 1, 6, ivhvText, text_color=color.white, text_size=size.small)
+    
+    table.cell(hud, 0, 7, "Score", text_color=color.gray, text_size=size.small)
+    table.cell(hud, 1, 7, str.tostring(reflex21, "#.###"), text_color=col, text_size=size.normal)
+    
+    table.cell(hud, 0, 8, "Momentum", text_color=color.gray, text_size=size.small)
+    momText = str.tostring(momentum, "#.##")
+    momCol  = momentum > 0 ? color.lime : momentum < 0 ? color.red : color.gray
+    table.cell(hud, 1, 8, momText, text_color=momCol, text_size=size.small)
+    
+    table.cell(hud, 0, 9, "HR / EOM", text_color=color.gray, text_size=size.small)
+    table.cell(hud, 1, 9, str.tostring(hr, "#.##") + " / " + str.tostring(eom, "#.##"), text_color=color.white, text_size=size.small)
+    
+    gammaMode = spot >= flip_eff ? "Pos γ" : "Neg γ"
+    table.cell(hud, 0, 10, "γ Mode", text_color=color.gray, text_size=size.small)
+    table.cell(hud, 1, 10, gammaMode, text_color=spot >= flip_eff ? color.lime : color.orange, text_size=size.small)
+    
+    table.cell(hud, 0, 11, "Regime", text_color=color.gray, text_size=size.small)
+    regTextColor = regime == "CONTAINMENT" ? color.yellow : regime == "DRAIN TILT" ? color.red : color.teal
+    table.cell(hud, 1, 11, regime, text_color=regTextColor, text_size=size.small)
+    
+    // Sweet Spot Gauge row (only if enabled)
+    if enableSweetSpotGauge
+        table.cell(hud, 0, 12, "Sweet Spot", text_color=color.gray, text_size=size.small)
+        table.cell(hud, 1, 12, sweetSpotBias, text_color=sweetSpotColor, text_size=size.small)
+
+// Verbose Label (global scope)
+if barstate.islast and showVerbose
+    label.delete(hudLabel)
+    txt = "Reflexivity 4.0 | Direction: " + direction
+    txt := txt + "\nScore: " + str.tostring(reflex21, "#.###")
+    txt := txt + " | Momentum: " + str.tostring(momentum, "#.##")
+    txt := txt + "\nIV/HV: " + str.tostring(momBase, "#.##")
+    txt := txt + " | GPD: " + str.tostring(gpdAdj, "#.##")
+    txt := txt + "\nHR: " + str.tostring(hr, "#.##")
+    txt := txt + " | EOM: " + str.tostring(eom, "#.##")
+    txt := txt + "\nWalls: " + str.tostring(pw_eff, "#.##") + " | " + str.tostring(flip_eff, "#.##") + " | " + str.tostring(cw_eff, "#.##")
+    hudLabel := label.new(bar_index, reflex21, txt, style=label.style_label_left, textcolor=color.white, color=color.new(col, 70), yloc=yloc.price, size=size.small)
+
+// Roundtable Renderer (function call for modularity, logic at global scope)
+center = (pw_eff + cw_eff) / 2.0
+float[] dummyRt = RoundtableRenderer(showRoundtable, iv, strikeSpacing, cw_eff, pw_eff, center)
+
+// Roundtable Renderer Logic (global scope to modify var variables)
+if barstate.islast and showRoundtable
+    label.delete(roundtableLabel)
+    
+    ivPct = iv * 100.0
+    
+    // Dynamic zones around current walls
+    float halfStep = strikeSpacing * 0.5
+    
+    upLow  = cw_eff
+    upHigh = cw_eff + halfStep
+    dnLow  = pw_eff - halfStep
+    dnHigh = pw_eff
+    
+    bias   = "Bull Drift toward " + str.tostring(upLow, "#.##") + "–" + str.tostring(upHigh, "#.##")
+    upZone = str.tostring(upLow, "#.##") + "–" + str.tostring(upHigh, "#.##")
+    dnZone = str.tostring(dnLow, "#.##") + "–" + str.tostring(dnHigh, "#.##")
+    ivNote = "Base case: IV fade → drift toward upper lane."
+    rtColor = color.new(color.green, 70)
+    
+    highIvThresh = 19.5
+    lowIvThresh  = 15.0
+    
+    if ivPct > highIvThresh
+        bias    := "Risk of slide toward lower lane"
+        upZone  := str.tostring(center, "#.##") + "–" + str.tostring(upHigh, "#.##")
+        dnZone  := str.tostring(dnLow, "#.##") + "–" + str.tostring(dnHigh, "#.##")
+        ivNote  := "IV elevated → first move more likely down toward lower lane."
+        rtColor := color.new(color.red, 70)
+    else if ivPct < lowIvThresh
+        bias    := "Compressed drift inside mid-lane"
+        upZone  := str.tostring(center, "#.##") + "–" + str.tostring(upHigh, "#.##")
+        dnZone  := str.tostring(dnLow, "#.##") + "–" + str.tostring(center, "#.##")
+        ivNote  := "Low IV → slow grind, heavy theta bleed."
+    
+    sessLabel   = dayofweek == dayofweek.friday ? "Next Session (Mon) Bias: " : "Tomorrow Bias: "
+    weekendNote = dayofweek == dayofweek.friday ?
+         "OPEX parking near flip → Monday gap + IV reset decides next lane." :
+         "Next open IV rotation decides upper vs lower lane."
+    
+    txt = "📊 ROUNDTABLE PROJECTION\n" +
+          sessLabel + bias + "\n" +
+          "Upside Zone: " + upZone + "\n" +
+          "Downside Zone: " + dnZone + "\n" +
+          "IV: " + str.tostring(ivPct, "#.0") + "%\n\n" +
+          "🐻 Bear: Book neutral unless IV spikes.\n" +
+          "🐟 Fish: Flows idle, price gravitates toward lanes.\n" +
+          "🐵 Monkey: Parking near flip; next session's IV is the trigger.\n\n" +
+          ivNote + "\n" +
+          weekendNote
+    
+    roundtableLabel := label.new(bar_index, 1.5, txt, style=label.style_label_left, textcolor=color.white, color=rtColor, size=size.small)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// PLOTS
+// ═════════════════════════════════════════════════════════════════════════════
+plot(reflex21, "Reflexivity Score", color=col, linewidth=3, style=plot.style_line)
+plot(momentum / 100, "Momentum", momentumColor, 2, plot.style_histogram)
+
+hline(0.75, "Risk",    color.new(color.red, 40),   hline.style_solid,  2)
+hline(0.60, "Active",  color.new(color.orange, 50),hline.style_dashed)
+hline(0.40, "Neutral", color.new(color.gray, 70),  hline.style_dotted)
+hline(0.25, "Calm",    color.new(color.teal, 50),  hline.style_dashed)
+hline(0.00, "Zero",    color.new(color.white, 80), hline.style_dotted)
+
+plot(hr,  "HR (Resistance)", color.new(color.red,   40), linewidth=2)
+plot(eom, "EOM (Motion)",    color.new(color.green, 40), linewidth=2)
+
+// Sweet Spot Gauge plot
+plot(enableSweetSpotGauge ? sweetSpotScore : na, "Sweet Spot Gauge", style=plot.style_columns, color=sweetSpotColor, linewidth=2)
+hline(enableSweetSpotGauge ? 0.5 : na, "Sweet Spot Threshold", color.new(color.white, 70), hline.style_dotted)
+
+bgcolor(regimeColor)
+
+// Optional diagnostics
+plot(hr_raw,      "HR raw",       color.new(color.red,   60), style=plot.style_circles)
+plot(eom_raw,     "EOM raw",      color.new(color.green, 60), style=plot.style_circles)
+plot(momBase - 1, "IV/HV - 1",    color.new(color.blue,  70))
+plot(gpdAdj,      "GPD",          color.new(color.purple,80))
+plot(tensionAdj,  "Tension",      color.new(color.orange,80))
+
+// Signals
+plotshape(showMarks and longCond,  title="Long",  style=shape.triangleup,   location=location.bottom, color=color.new(color.lime, 0), size=size.small, text="▲")
+plotshape(showMarks and shortCond, title="Short", style=shape.triangledown, location=location.top,    color=color.new(color.red, 0),  size=size.small, text="▼")
+

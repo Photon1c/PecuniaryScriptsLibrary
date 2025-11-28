@@ -1,0 +1,377 @@
+//@version=5
+// ───────────────────────────────────────────────────────────────────────────────
+// REFLEXIVITY INDEX 2.0.1 - BREAKOUT EDITION
+// ───────────────────────────────────────────────────────────────────────────────
+// Purpose: Breakout-focused reflexivity indicator with volume surge and chop filtering
+// Type: Sub-pane indicator (separate chart below price)
+// Key Features:
+//   - Breakout sensitivity tuning (0.5-3.0 multiplier)
+//   - Volume surge detection and expansion multiplier
+//   - Chop filter to reduce signals during low range periods
+//   - Enhanced GPD with velocity and acceleration components
+//   - Tension calculation with velocity component
+//   - Breakout signals: Bullish (EOM↑ + HR↓ + volume) and Bearish (HR↑ + EOM↓ + volume)
+//   - Regime detection: BREAKOUT UP, BREAKDOWN, PRIMING, PINNED, RANGE
+//   - Component breakdown plots (GPD, Tension, Momentum, Vol Factor)
+//   - Physics analogy documentation included
+// Use Case: Identifying and filtering breakout opportunities with volume confirmation
+// ───────────────────────────────────────────────────────────────────────────────
+indicator("Reflexivity Index 2.0.1 - Breakout Edition", overlay=false, max_lines_count=500)
+//───────────────────────────────────────────────────────────────────────────────
+// Reflexivity Index 2.0.1 (Garage-Aware Gamma Framework)
+//───────────────────────────────────────────────────────────────────────────────
+// Description:
+//   This script models reflexive dealer behavior in the SPY options market using
+//   gamma exposure dynamics as a potential energy surface. It visualizes how 
+//   price (the "spot") interacts with hedging forces around key structural levels:
+//   - Gamma Flip Point: the neutrality ridge where dealer delta hedging changes sign
+//   - Put & Call Walls: the corridor boundaries where dealer gamma exposure pins price
+//
+// Conceptual Model:
+//   The market behaves like a ball rolling across a garage ramp:
+//   - Steep slopes (|∂Γ/∂S| high) indicate strong reflexivity and rapid price motion
+//   - Flat zones mark equilibrium where gamma is neutralized
+//   - IV (Implied Volatility) acts as friction — low IV dampens movement, 
+//     high IV amplifies acceleration
+//
+//   The Reflexivity Index combines three core terms:
+//     GPD (Gamma Potential Differential) × Tension × Momentum
+//   producing a live measure of how close the system is to self-reinforcing motion.
+//
+// Visualization:
+//   • Blue/orange lines = Gamma Flip and Wall Levels
+//   • Reflexivity plot = Composite of gamma curvature, volatility tension, and momentum
+//   • Optional overlays: Hedging Resistance (red) and Ease of Motion (green)
+//
+// Usage:
+//   Designed for intraday observation of dealer positioning, IV compression/expansion,
+//   and likely reversal zones. Higher Reflexivity values signal amplified, unstable
+//   feedback regimes; lower values suggest pinned, range-bound conditions.
+//
+// Author: Leslie Cuadra & GPT-5
+// Version: 2.1 (Nov 2025)
+//───────────────────────────────────────────────────────────────────────────────
+
+// ═════════════════════════════════════════════════════════════════════════════
+// INPUTS
+// ═════════════════════════════════════════════════════════════════════════════
+// Volatility Settings
+useDynHV   = input.bool(true, "Use Dynamic HV", group="Volatility", tooltip="Calculate HV from price vs manual input")
+hvLen      = input.int(20, "HV Length", group="Volatility", minval=10)
+ivInput    = input.float(19.35, "Implied Volatility %", group="Volatility", step=0.01)
+hvInput    = input.float(14.58, "Historical Volatility %", group="Volatility", step=0.01)
+
+// Gamma Levels
+flipLevel  = input.float(660.54, "Gamma Flip Level", group="Gamma Levels", step=0.01)
+callWall   = input.float(665.0, "Call Wall", group="Gamma Levels", step=0.01)
+putWall    = input.float(663.0, "Put Wall", group="Gamma Levels", step=0.01)
+
+// Breakout Sensitivity (NEW)
+breakoutSens = input.float(1.5, "Breakout Sensitivity", group="Breakout Settings", minval=0.5, maxval=3.0, step=0.1, tooltip="Higher = more sensitive to momentum shifts")
+chopFilter   = input.float(0.65, "Chop Filter Strength", group="Breakout Settings", minval=0.0, maxval=1.0, step=0.05, tooltip="Higher = filters more chop")
+volExpansion = input.float(1.2, "Volume Expansion Multiplier", group="Breakout Settings", minval=1.0, maxval=2.0, step=0.1)
+
+// Component Weights
+alphaBias  = input.float(0.40, "α: GPD Bias", group="Weights", minval=0, step=0.05)
+betaBias   = input.float(0.60, "β: Tension Bias", group="Weights", minval=0, step=0.05)
+wTension   = input.float(0.70, "Tension Weight", group="Weights", minval=0, maxval=1, step=0.05)
+kAccel     = input.float(0.75, "κ: IV Acceleration", group="Weights", minval=0, step=0.05)
+
+// Smoothing
+nAccel     = input.int(2, "IV Accel Period", group="Smoothing", minval=1, maxval=10)
+nSmooth    = input.int(2, "Score Smooth Period", group="Smoothing", minval=1, maxval=10)
+
+// Display
+showTable      = input.bool(true, "Show Info Table", group="Display")
+showBreakouts  = input.bool(true, "Show Breakout Signals", group="Display")
+showComponents = input.bool(false, "Show Component Breakdown", group="Display")
+
+// ═════════════════════════════════════════════════════════════════════════════
+// HELPER FUNCTIONS
+// ═════════════════════════════════════════════════════════════════════════════
+clamp01(x) => math.max(0.0, math.min(1.0, x))
+
+// Adaptive smoothing based on volatility regime
+adaptiveSmooth(src, period, volRatio) =>
+    adaptive = math.round(period * (1.0 / math.max(volRatio, 0.5)))
+    ta.ema(src, adaptive)
+
+// Breakout detection using rate of change + volume
+detectBreakout(src, threshold, volMult) =>
+    roc = ta.roc(src, 3)
+    volRatio = volume / ta.sma(volume, 20)
+    momentum = math.abs(roc) * volRatio
+    momentum > threshold and volRatio > volMult
+
+// ═════════════════════════════════════════════════════════════════════════════
+// CORE CALCULATIONS
+// ═════════════════════════════════════════════════════════════════════════════
+spot = close
+
+// Volatility Calculations
+iv   = ivInput / 100.0
+ret  = math.log(spot / math.max(nz(spot[1], spot), 1e-9))
+hvD  = ta.stdev(ret, hvLen) * math.sqrt(252.0)
+hv   = useDynHV ? hvD : hvInput / 100.0
+
+// IV/HV ratio with breakout emphasis
+ivHvRatio = iv / math.max(hv, 1e-9)
+ivHvMom   = ta.roc(ivHvRatio, 5) * breakoutSens
+
+// Gamma Structure
+pw_eff   = putWall
+cw_eff   = callWall
+flip_eff = flipLevel
+rng      = math.max(0.1, math.abs(cw_eff - pw_eff))
+
+// Wall bias (above call wall = breakout territory)
+wallBias = clamp01((spot - cw_eff) / rng)
+
+// GPD - Enhanced for breakout detection
+gpdRaw     = (spot - flip_eff) / math.max(spot, 1e-9)
+gpd        = math.abs(gpdRaw)
+gpdVel     = ta.change(gpd) * breakoutSens
+gpdAccel   = ta.change(gpdVel)
+gpdAdj     = gpd * (1.0 + alphaBias * wallBias + 0.5 * math.abs(gpdVel))
+
+// Tension - Distance from flip with velocity component
+tensionBase = clamp01(math.abs(spot - flip_eff) / rng)
+tensionVel  = ta.change(tensionBase) * breakoutSens
+tensionAdj  = tensionBase * (1.0 + betaBias * wallBias + 0.3 * math.abs(tensionVel))
+
+// Momentum - Multi-factor
+atrPct     = ta.atr(14) / math.max(spot, 1e-9)
+atrRoc     = ta.roc(atrPct, 3)
+ivDelta    = ta.change(atrPct)
+ivAccelRaw = ta.ema(ivDelta, nAccel)
+ivAccel    = ivAccelRaw + (atrRoc * 0.5)  // Add price velocity
+momAdj     = ivHvRatio * (1.0 + kAccel * ivAccel)
+
+// Volume surge detection
+volSurge = volume / ta.sma(volume, 20)
+volFactor = clamp01((volSurge - 1.0) / volExpansion)
+
+// Chop Filter - Reduces signal during low range periods
+priceRange = high - low
+avgRange   = ta.sma(priceRange, 20)
+rangeRatio = priceRange / math.max(avgRange, 1e-9)
+chopMult   = rangeRatio > chopFilter ? 1.0 + (rangeRatio - chopFilter) : rangeRatio / chopFilter
+
+// Composite Score with breakout amplification
+coreBase   = gpdAdj * (wTension * tensionAdj + (1.0 - wTension)) * momAdj
+coreWithVol = coreBase * (1.0 + 0.3 * volFactor)
+coreFiltered = coreWithVol * chopMult
+reflex21   = ta.ema(coreFiltered, nSmooth)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// HR & EOM - Recalibrated for breakouts
+// ═════════════════════════════════════════════════════════════════════════════
+ivMin  = 0.08
+ivMax  = 0.35
+ivNorm = clamp01((iv - ivMin) / math.max(ivMax - ivMin, 1e-6))
+
+center       = (pw_eff + cw_eff) / 2.0
+distToCenter = math.abs(spot - center) / (rng / 2.0)
+proximity    = 1.0 - clamp01(distToCenter)
+
+// HR - Lower when approaching breakout zones
+hr_base = proximity * ivNorm
+hr_adjusted = hr_base * (1.0 - 0.3 * volFactor)  // Reduce resistance on volume
+hr = clamp01(hr_adjusted)
+
+// EOM - Higher when conditions favor movement
+directionalBias = clamp01((spot - flip_eff) / rng)
+eom_base = (1.0 - proximity) * ivNorm * directionalBias
+eom_boosted = eom_base * (1.0 + 0.5 * volFactor) * chopMult
+eom = clamp01(eom_boosted)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// BREAKOUT SIGNALS
+// ═════════════════════════════════════════════════════════════════════════════
+// Bullish breakout: EOM rising + HR falling + volume surge + above flip
+bullishBreakout = detectBreakout(eom, 2.5, volExpansion) and 
+                  hr < 0.4 and 
+                  spot > flip_eff and 
+                  reflex21 > reflex21[1]
+
+// Bearish breakdown: EOM falling + HR rising + volume surge + below flip  
+bearishBreakout = detectBreakout(hr, 2.5, volExpansion) and 
+                  eom < 0.3 and 
+                  spot < flip_eff and 
+                  reflex21 > reflex21[1]
+plotshape(showBreakouts and bullishBreakout, title="Bullish Breakout", style=shape.triangleup, location=location.bottom, color=color.new(color.lime, 0), size=size.normal, text="BREAK↑")
+plotshape(showBreakouts and bearishBreakout, title="Bearish Breakdown", style=shape.triangledown, location=location.top, color=color.new(color.red, 0), size=size.normal, text="BREAK↓")
+// ═════════════════════════════════════════════════════════════════════════════
+// REGIME DETECTION
+// ═════════════════════════════════════════════════════════════════════════════
+regime = spot > cw_eff + (rng * 0.02) ? "BREAKOUT UP" : 
+         spot < pw_eff - (rng * 0.02) ? "BREAKDOWN" : 
+         eom > 0.5 and hr < 0.4 ? "PRIMING" :
+         hr > 0.6 ? "PINNED" : "RANGE"
+
+regimeColor = regime == "BREAKOUT UP" ? color.new(color.lime, 90) : 
+              regime == "BREAKDOWN" ? color.new(color.red, 90) :
+              regime == "PRIMING" ? color.new(color.orange, 93) :
+              regime == "PINNED" ? color.new(color.yellow, 95) :
+              color.new(color.gray, 97)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// PLOTS - All normalized to 0-1 scale
+// ═════════════════════════════════════════════════════════════════════════════
+// Main reflexivity score with breakout coloring (now 0-1 scale)
+reflexColor = reflex21 >= 0.80 ? color.new(color.red, 0) : 
+              reflex21 >= 0.60 ? color.new(color.orange, 0) : 
+              reflex21 >= 0.40 ? color.new(color.yellow, 0) :
+              color.new(color.teal, 0)
+
+plot(reflex21, "Reflexivity", reflexColor, 3, plot.style_line)
+
+// Reference zones (adjusted to 0-1 scale)
+hline(0.80, "Extreme", color.new(color.red, 40), hline.style_solid, 2)
+hline(0.60, "Active", color.new(color.orange, 50), hline.style_dashed)
+hline(0.40, "Neutral", color.new(color.gray, 70), hline.style_dotted)
+hline(0.20, "Quiet", color.new(color.teal, 50), hline.style_dashed)
+
+// HR & EOM - Primary indicators
+plot(hr, "Hedging Resistance", color.new(color.red, 0), 2)
+plot(eom, "Ease of Motion", color.new(color.lime, 0), 2)
+
+// Background shading
+bgcolor(regimeColor, title="Regime")
+
+// Component breakdown (optional) - normalized to 0-1 scale
+
+plot(gpdAdj, "GPD", color.new(color.purple, 40), 1)
+plot(tensionAdj, "Tension", color.new(color.orange, 40), 1)
+plot(clamp01(momAdj / 3.0), "Momentum", color.new(color.fuchsia, 40), 1)
+plot(volFactor, "Vol Factor", color.new(color.blue, 60), 1, plot.style_area)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// INFO TABLE - Clean HUD
+// ═════════════════════════════════════════════════════════════════════════════
+var table infoTable = table.new(position.top_right, 2, 11, 
+     bgcolor=color.new(color.black, 10), 
+     frame_color=color.gray, 
+     frame_width=1)
+
+if barstate.islast and showTable
+    // Header
+    table.cell(infoTable, 0, 0, "REFLEXIVITY 2.0.1", 
+         text_color=color.white, 
+         bgcolor=color.new(color.blue, 30), 
+         text_size=size.normal)
+    table.cell(infoTable, 1, 0, "BREAKOUT", 
+         bgcolor=color.new(color.blue, 30),
+         text_color=color.yellow,
+         text_size=size.small)
+    
+    // Score
+    table.cell(infoTable, 0, 1, "Score", text_color=color.gray, text_size=size.small)
+    table.cell(infoTable, 1, 1, str.tostring(reflex21, "#.###"), 
+         text_color=reflexColor, text_size=size.normal)
+    
+    // Regime
+    table.cell(infoTable, 0, 2, "Regime", text_color=color.gray, text_size=size.small)
+    regTextColor = regime == "BREAKOUT UP" ? color.lime :
+                   regime == "BREAKDOWN" ? color.red :
+                   regime == "PRIMING" ? color.orange :
+                   regime == "PINNED" ? color.yellow : color.white
+    table.cell(infoTable, 1, 2, regime, text_color=regTextColor, text_size=size.small)
+    
+    // Walls
+    table.cell(infoTable, 0, 3, "Call Wall", text_color=color.gray, text_size=size.small)
+    table.cell(infoTable, 1, 3, str.tostring(cw_eff, "#.##"), 
+         text_color=color.lime, text_size=size.small)
+    
+    table.cell(infoTable, 0, 4, "Put Wall", text_color=color.gray, text_size=size.small)
+    table.cell(infoTable, 1, 4, str.tostring(pw_eff, "#.##"), 
+         text_color=color.red, text_size=size.small)
+    
+    table.cell(infoTable, 0, 5, "Flip", text_color=color.gray, text_size=size.small)
+    table.cell(infoTable, 1, 5, str.tostring(flip_eff, "#.##"), 
+         text_color=color.yellow, text_size=size.small)
+    
+    // IV/HV
+    table.cell(infoTable, 0, 6, "IV/HV", text_color=color.gray, text_size=size.small)
+    ivColor = ivHvRatio > 1.2 ? color.red : ivHvRatio > 1.0 ? color.orange : color.aqua
+    table.cell(infoTable, 1, 6, str.tostring(ivHvRatio, "#.##"), 
+         text_color=ivColor, text_size=size.small)
+    
+    // HR & EOM
+    table.cell(infoTable, 0, 7, "HR", text_color=color.gray, text_size=size.small)
+    hrColor = hr > 0.6 ? color.red : hr > 0.4 ? color.orange : color.lime
+    table.cell(infoTable, 1, 7, str.tostring(hr, "#.##"), 
+         text_color=hrColor, text_size=size.small)
+    
+    table.cell(infoTable, 0, 8, "EOM", text_color=color.gray, text_size=size.small)
+    eomColor = eom > 0.5 ? color.lime : eom > 0.3 ? color.yellow : color.gray
+    table.cell(infoTable, 1, 8, str.tostring(eom, "#.##"), 
+         text_color=eomColor, text_size=size.small)
+    
+    // Volume Status
+    table.cell(infoTable, 0, 9, "Vol Surge", text_color=color.gray, text_size=size.small)
+    volColor = volSurge > 1.5 ? color.lime : volSurge > 1.2 ? color.yellow : color.gray
+    volText = str.tostring(volSurge, "#.##") + "x"
+    table.cell(infoTable, 1, 9, volText, text_color=volColor, text_size=size.small)
+    
+    // Chop Status
+    table.cell(infoTable, 0, 10, "Range", text_color=color.gray, text_size=size.small)
+    chopColor = chopMult > 1.2 ? color.lime : chopMult < 0.8 ? color.red : color.gray
+    chopText = chopMult > 1.0 ? "EXPANDING" : "CHOP"
+    table.cell(infoTable, 1, 10, chopText, text_color=chopColor, text_size=size.small)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ALERTS
+// ═════════════════════════════════════════════════════════════════════════════
+alertcondition(bullishBreakout, "Bullish Breakout", "Reflexivity: Bullish breakout detected!")
+alertcondition(bearishBreakout, "Bearish Breakdown", "Reflexivity: Bearish breakdown detected!")
+alertcondition(regime == "PRIMING", "Priming for Move", "Reflexivity: Market priming for breakout")
+alertcondition(ta.cross(reflex21, 1.30), "Extreme Zone", "Reflexivity entering extreme zone")
+
+//───────────────────────────────────────────────────────────────────────────────
+// Physics Analogy:
+//───────────────────────────────────────────────────────────────────────────────
+//   The Reflexivity Index can be interpreted as a physical system:
+//
+//       • Price (S)  → position of a ball on a curved potential surface
+//       • Gamma (Γ)  → curvature of that surface (∂²P/∂S²)
+//       • GPD        → local gradient or slope of the surface (|∂Γ/∂S|)
+//       • IV         → inverse friction coefficient (μ⁻¹) affecting acceleration
+//       • Reflexivity → normalized potential energy × momentum
+//
+//   When Reflexivity ↑:
+//       → The slope steepens and friction (IV damping) falls,
+//         causing rapid, self-reinforcing price motion.
+//
+//   When Reflexivity ↓:
+//       → The system stabilizes; hedging flows balance, and 
+//         the ball settles into a local potential minimum.
+//
+//   Directional Rule of Thumb:
+//       - Below Gamma Flip → dealer hedging sells into weakness (negative feedback)
+//       - Above Gamma Flip → dealer hedging buys into strength (positive feedback)
+//
+//   Potential Energy Analogy:
+//       Eₚ ∝ GPD × Tension × (1 / IV)
+//       Acceleration ∝ ∂Eₚ/∂S  →  faster when IV compresses and slope steepens.
+//
+//   Think of each session as a “garage ramp” resetting its incline —
+//   when the slope flattens, dealers are neutral; when it tilts, 
+//   reflexivity pushes the spot toward its next equilibrium.
+//───────────────────────────────────────────────────────────────────────────────
+
+//───────────────────────────────────────────────────────────────────────────────
+// Suggested Interpretation Workflow (Daily)
+//───────────────────────────────────────────────────────────────────────────────
+// 1) IV & Walls
+//    • Note IV, IV/HV, and PW/CW/Flip. Sub-15% IV ⇒ damping; >15% ⇒ easier motion.
+// 2) Reflexivity Slope
+//    • Rising score with rising IV ⇒ doors opening (momentum viable).
+//    • Rising score with falling IV ⇒ dealer drift (fade chases).
+// 3) Resistance vs Motion
+//    • Watch Hedging Resistance (HR) ↓ and Ease Of Motion (EOM) ↑ together.
+//    • Best entries: EOM↑ + HR↓ near flip; exits as HR↑ into walls.
+// 4) Bias
+//    • Above Flip: buy-the-dip bias until IV spikes.
+//    • Below Flip: respect acceleration (don’t fade without IV stall).
+//───────────────────────────────────────────────────────────────────────────────

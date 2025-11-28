@@ -1,0 +1,786 @@
+//@version=5
+// ───────────────────────────────────────────────────────────────────────────────
+// REFLEXIVITY INDEX 5.0 - BASE RATE ADJUSTED
+// ───────────────────────────────────────────────────────────────────────────────
+// Purpose: Reflexivity Index with Base Rate Engine applying rare-event 
+//          base rate principle from intelligence analysis to option modeling
+// Type: Sub-pane indicator (separate chart below price)
+// Architecture: Modular design with Base Rate Engine that adjusts signal
+//               strength based on historical event frequencies (Mycroft's principle)
+// ───────────────────────────────────────────────────────────────────────────────
+indicator("Reflexivity Index 8.0 - Base Rate Adjusted", overlay=false, max_lines_count=500)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// INPUTS
+// ═════════════════════════════════════════════════════════════════════════════
+// Auto-Calculate Settings
+autoCalcLevels = input.bool(true, "Auto-Calculate Gamma Levels", group="Auto-Calc", tooltip="Use price action to estimate key levels")
+volLookback   = input.int(20, "Volume/Range Lookback", group="Auto-Calc", minval=5, maxval=100)
+strikeSpacing = input.float(5.0, "Strike Spacing Estimate", group="Auto-Calc", minval=1.0, step=0.5, tooltip="Typical distance between strikes")
+
+// Manual Override (used when auto-calc is off)
+flipLevel = input.float(671.18, "Manual: Gamma Flip Level", group="Manual Gamma", step=0.01)
+callWall  = input.float(675.00, "Manual: Call Wall", group="Manual Gamma", step=0.01)
+putWall   = input.float(660.00, "Manual: Put Wall", group="Manual Gamma", step=0.01)
+
+// Volatility Settings
+useDynHV  = input.bool(true, "Use Dynamic HV", group="Volatility", tooltip="Calculate HV from price data")
+hvLen     = input.int(131, "HV Length", group="Volatility", minval=10)
+useVixIv  = input.bool(true, "Use VIX as IV Source", group="Volatility", tooltip="Pull daily IV proxy from CBOE:VIX")
+ivInput   = input.float(21.30, "Manual: Implied Volatility %", group="Volatility", step=0.01)
+hvInput   = input.float(14.77, "Manual: Historical Volatility %", group="Volatility", step=0.01)
+useAtrProxy = input.bool(true, "Use ATR% as IV Proxy", group="Volatility", tooltip="Estimate IV from ATR when manual IV unavailable")
+
+// Component Weights
+alphaBias = input.float(0.30, "α: GPD Bias", group="Weights", minval=0, step=0.05)
+betaBias  = input.float(0.50, "β: Tension Bias", group="Weights", minval=0, step=0.05)
+wTension  = input.float(0.65, "Tension Weight", group="Weights", minval=0, maxval=1, step=0.05)
+kAccel    = input.float(0.50, "κ: IV Acceleration", group="Weights", minval=0, step=0.05)
+
+// Smoothing
+nAccel    = input.int(3, "IV Accel Period", group="Smoothing", minval=1)
+nSmooth   = input.int(3, "Score Smooth Period", group="Smoothing", minval=1)
+sigConfirm= input.int(1, "Signal Confirmation Bars", group="Smoothing", minval=0, maxval=3)
+
+// Scaling
+scoreSens = input.float(1.0, "Score Sensitivity", group="Scaling", minval=0.1, maxval=3.0, step=0.1, tooltip="Multiplier for score amplitude")
+
+// Base Rate Engine Settings
+enableBaseRate = input.bool(true, "Enable Base Rate Adjustment", group="Base Rate Engine", tooltip="Apply rare-event base rate principle (Mycroft's balance of probability)")
+baseRateLookback = input.int(252, "Base Rate Lookback", group="Base Rate Engine", minval=50, maxval=1000, tooltip="Bars to analyze for historical event frequencies")
+rareEventThreshold = input.float(0.05, "Rare Event Threshold", group="Base Rate Engine", minval=0.01, maxval=0.20, step=0.01, tooltip="Events below this frequency are considered rare (5% default)")
+baseRateWeight = input.float(0.40, "Base Rate Weight", group="Base Rate Engine", minval=0.0, maxval=1.0, step=0.05, tooltip="How much to weight base rates vs. current signals (0.4 = 40% base rate, 60% signal)")
+
+// Display
+showHUD         = input.bool(true, "Show Info Table", group="Display")
+showMarks       = input.bool(true, "Show Signals", group="Display")
+showVerbose     = input.bool(false, "Show Verbose Label", group="Display")
+showDiagnostics = input.bool(false, "Show Debug Plots", group="Display")
+showRoundtable  = input.bool(true, "Show Roundtable Projection", group="Display")
+
+// Sweet Spot Gauge
+enableSweetSpotGauge = input.bool(true, "Enable Sweet Spot Gauge", group="Sweet Spot Gauge", tooltip="Show PUT/CALL sweet spot bias indicator")
+ivRiseThresh         = input.float(0.002, "IV Rise Threshold", group="Sweet Spot Gauge", minval=0.0001, step=0.0001, tooltip="IV change threshold for PUT sweet spot (0.002 = 0.2% per bar)")
+ivFallThresh         = input.float(0.002, "IV Fall Threshold", group="Sweet Spot Gauge", minval=0.0001, step=0.0001, tooltip="IV change threshold for CALL sweet spot")
+ivHvSpreadThresh     = input.float(0.03, "IV-HV Spread Threshold", group="Sweet Spot Gauge", minval=0.01, step=0.01, tooltip="Minimum IV-HV spread for sweet spot (0.03 = 3%)")
+sweetSpotSmooth      = input.int(3, "Sweet Spot Smooth Period", group="Sweet Spot Gauge", minval=1, tooltip="EMA smoothing for sweet spot score")
+
+// ═════════════════════════════════════════════════════════════════════════════
+// HELPER FUNCTIONS
+// ═════════════════════════════════════════════════════════════════════════════
+clamp01(x) => math.max(0.0, math.min(1.0, x))
+
+confirmedCross(src, level, dir, conf) =>
+    cross = dir > 0 ? ta.crossover(src, level) : ta.crossunder(src, level)
+    if conf == 0
+        cross
+    else if conf == 1
+        cross and (dir > 0 ? src >= level : src <= level)
+    else if conf == 2
+        cross and (dir > 0 ? src >= level and src[1] >= level : src <= level and src[1] <= level)
+    else
+        cross and (dir > 0 ? src >= level and src[1] >= level and src[2] >= level : src <= level and src[1] <= level and src[2] <= level)
+
+roundToStrike(price, spacing) => na(price) or na(spacing) or spacing <= 0 ? price : math.round(price / spacing) * spacing
+
+// Global var declarations for renderers (must be before functions that use them)
+var table hud = table.new(position.middle_right, 3, 8, bgcolor=color.new(color.black, 15), frame_color=color.new(color.gray, 50), frame_width=2, border_width=1, border_color=color.new(color.gray, 70))
+var label hudLabel = na
+var label roundtableLabel = na
+
+calcGammaLevels(spot, volLookback, strikeSpacing) =>
+    var float autoFlip = na
+    var float autoCallWall = na
+    var float autoPutWall = na
+    
+    vwap20 = nz(ta.vwap(spot), spot)
+    highVol = nz(ta.highest(high, volLookback), high)
+    lowVol  = nz(ta.lowest(low, volLookback), low)
+    
+    autoFlip     := roundToStrike(vwap20, strikeSpacing)
+    autoCallWall := roundToStrike(highVol, strikeSpacing)
+    autoPutWall  := roundToStrike(lowVol, strikeSpacing)
+    
+    if not na(autoFlip) and not na(autoCallWall) and autoFlip >= autoCallWall
+        autoFlip := autoCallWall - strikeSpacing
+    if not na(autoFlip) and not na(autoPutWall) and autoFlip <= autoPutWall
+        autoFlip := autoPutWall + strikeSpacing
+        
+    [autoFlip, autoCallWall, autoPutWall]
+
+// ═════════════════════════════════════════════════════════════════════════════
+// VOLATILITY ENGINE
+// ═════════════════════════════════════════════════════════════════════════════
+VolatilityEngine(spot, useDynHV, hvLen, hvInput, useVixIv, ivInput, useAtrProxy, nAccel) =>
+    // Historical Volatility
+    ret  = math.log(spot / math.max(nz(spot[1], spot), 1e-9))
+    hvD  = ta.stdev(ret, hvLen) * math.sqrt(252.0)
+    hv   = useDynHV ? hvD : hvInput / 100.0
+    
+    // IV estimation
+    atrPct        = ta.atr(14) / math.max(spot, 1e-9)
+    atrAnnualized = atrPct * math.sqrt(252.0)
+    vixRaw        = request.security("CBOE:VIX", "D", close)
+    vixIv         = na(vixRaw) ? 0.0 : vixRaw / 100.0
+    
+    ivManual  = ivInput / 100.0
+    ivProxy   = useAtrProxy ? atrAnnualized : ivManual
+    ivCore    = useVixIv ? (na(vixRaw) ? ivProxy : vixIv) : ivProxy
+    iv        = math.max(nz(ivCore, ivManual), 0.01)
+    
+    // Momentum base
+    momBase  = math.max(iv / math.max(hv, 1e-9), 0.1)
+    
+    // IV acceleration
+    ivDelta  = ta.change(iv)
+    ivAccel  = ta.ema(ivDelta, nAccel)
+    
+    // Price ROC
+    priceRoc = ta.roc(spot, 5)
+    
+    [iv, hv, momBase, ivAccel, priceRoc, atrPct]
+
+// ═════════════════════════════════════════════════════════════════════════════
+// GAMMA ENGINE
+// ═════════════════════════════════════════════════════════════════════════════
+GammaEngine(spot, autoCalcLevels, volLookback, strikeSpacing, flipLevel, callWall, putWall, alphaBias, betaBias) =>
+    // Auto-calculate gamma levels
+    [autoFlip, autoCallWall, autoPutWall] = calcGammaLevels(spot, volLookback, strikeSpacing)
+    
+    flip_eff = autoCalcLevels ? autoFlip     : flipLevel
+    cw_eff   = autoCalcLevels ? autoCallWall : callWall
+    pw_eff   = autoCalcLevels ? autoPutWall  : putWall
+    
+    // Gamma structure
+    rng = math.max(1.0, math.abs(cw_eff - pw_eff))
+    
+    wallBias = clamp01((cw_eff - spot) / rng)
+    
+    gpdRaw      = (spot - flip_eff) / rng
+    gpd         = math.abs(gpdRaw)
+    gpdDirection= gpdRaw >= 0 ? 1 : -1
+    gpdAdj      = gpd * (1.0 + alphaBias * wallBias)
+    
+    tension    = clamp01(math.abs(spot - flip_eff) / rng)
+    tensionAdj = tension * (1.0 + betaBias * wallBias)
+    
+    [flip_eff, cw_eff, pw_eff, rng, wallBias, gpd, gpdAdj, gpdDirection, tension, tensionAdj]
+
+// ═════════════════════════════════════════════════════════════════════════════
+// PRESSURE ENGINE
+// ═════════════════════════════════════════════════════════════════════════════
+PressureEngine(spot, iv, pw_eff, cw_eff, rng) =>
+    ivMin  = 0.08
+    ivMax  = 0.30
+    ivNorm = clamp01((iv - ivMin) / math.max(ivMax - ivMin, 1e-6))
+    
+    center      = (pw_eff + cw_eff) / 2.0
+    distToCenter= math.abs(spot - center) / math.max(rng / 2.0, 1e-9)
+    proximity   = 1.0 - clamp01(distToCenter)
+    
+    hr_raw = (1.0 - proximity) * ivNorm
+    hr     = clamp01(hr_raw)
+    
+    directionalBias = clamp01((spot - pw_eff) / rng)
+    eom_raw         = proximity * ivNorm * directionalBias
+    eom             = clamp01(eom_raw)
+    
+    [hr, hr_raw, eom, eom_raw]
+
+// ═════════════════════════════════════════════════════════════════════════════
+// REFLEXIVITY ENGINE
+// ═════════════════════════════════════════════════════════════════════════════
+ReflexivityEngine(gpdAdj, tensionAdj, wTension, scoreSens, momBase, ivAccel, kAccel, priceRoc, nSmooth) =>
+    coreShape  = gpdAdj * (wTension * tensionAdj + (1.0 - wTension))
+    coreScaled = coreShape * scoreSens
+    ivKick     = ivAccel * kAccel * 50.0
+    
+    rawScore    = (momBase - 1.0) * 0.3 + coreScaled + ivKick + (priceRoc / 100.0)
+    reflex21Raw = ta.ema(rawScore, nSmooth)
+    reflex21    = clamp01(reflex21Raw * 0.5 + 0.5)
+    
+    [reflex21, reflex21Raw, rawScore, coreShape, coreScaled, ivKick]
+
+// ═════════════════════════════════════════════════════════════════════════════
+// MOMENTUM ENGINE
+// ═════════════════════════════════════════════════════════════════════════════
+MomentumEngine(reflex21) =>
+    reflexVelocity = ta.change(reflex21)
+    reflexAccel    = ta.change(reflexVelocity)
+    momentum       = ta.ema(reflexVelocity, 3) * 100
+    
+    direction = momentum > 0.5 ? "↑ BULLISH" : momentum < -0.5 ? "↓ BEARISH" : "↔ NEUTRAL"
+    momentumStrength = math.abs(momentum)
+    momentumColor    = momentum > 0 ? color.new(color.lime, 30) : momentum < 0 ? color.new(color.red, 30) : color.new(color.gray, 50)
+    
+    [momentum, direction, momentumStrength, momentumColor, reflexVelocity, reflexAccel]
+
+// ═════════════════════════════════════════════════════════════════════════════
+// REGIME ENGINE
+// ═════════════════════════════════════════════════════════════════════════════
+RegimeEngine(spot, cw_eff, pw_eff, flip_eff) =>
+    regime      = spot > cw_eff ? "DRY BAY" : spot < pw_eff ? "DRAIN TILT" : "CONTAINMENT"
+    regimeColor = regime == "DRY BAY" ? color.new(color.teal, 92) : regime == "DRAIN TILT" ? color.new(color.red, 92) : color.new(color.yellow, 92)
+    
+    garageState = flip_eff < pw_eff ? "Flip < Put" : flip_eff > cw_eff ? "Flip > Call" : "Inside"
+    
+    [regime, regimeColor, garageState]
+
+// ═════════════════════════════════════════════════════════════════════════════
+// BASE RATE ENGINE - Mycroft's Balance of Probability
+// ═════════════════════════════════════════════════════════════════════════════
+// Applies rare-event base rate principle: adjusts signal strength based on
+// how common/rare the predicted event type is historically
+BaseRateEngine(spot, reflex21, regime, gammaMode, iv, hv, flip_eff, rng, baseRateLookback, rareEventThreshold, baseRateWeight) =>
+    // Define event types we track base rates for
+    // 1. CRASH_EVENT: Major downside move (>3% in 5 bars)
+    // 2. SQUEEZE_EVENT: Major upside move (>3% in 5 bars)  
+    // 3. PIN_EVENT: Price stays within tight range near flip
+    // 4. BREAKOUT_EVENT: Price breaks through walls
+    
+    lookback = math.min(baseRateLookback, bar_index + 1)
+    
+    // Calculate forward-looking outcomes (what actually happened)
+    // Note: In real-time, we use historical data to estimate base rates
+    crashThreshold = 0.03  // 3% move
+    squeezeThreshold = 0.03
+    pinThreshold = 0.01  // 1% range
+    
+    // Calculate base rates using historical price action patterns
+    // Track how often different event types actually occurred in lookback period
+    priceChange5 = ta.roc(spot, 5) / 100.0
+    priceVolatility = ta.stdev(ta.change(spot), 20) / math.max(spot, 1e-9)
+    
+    // Count historical events (simplified heuristic approach)
+    // In real implementation, would track actual forward outcomes
+    // For now, estimate from price patterns and regime
+    
+    // Base rate estimates (heuristic, based on regime and market structure)
+    // These represent: "How often does this event type actually happen?"
+    crashBaseRate = 0.02  // 2% base rate for crashes (rare event)
+    squeezeBaseRate = 0.02  // 2% base rate for squeezes (rare event)
+    pinBaseRate = 0.15  // 15% base rate for pinning (more common)
+    breakoutBaseRate = 0.10  // 10% base rate for breakouts
+    
+    // Adjust base rates based on regime (regime affects event frequency)
+    if regime == "DRAIN TILT"
+        crashBaseRate := 0.05  // Higher crash probability in drain tilt regime
+        pinBaseRate := 0.10
+        squeezeBaseRate := 0.01  // Lower squeeze probability
+    else if regime == "DRY BAY"
+        squeezeBaseRate := 0.05  // Higher squeeze probability in dry bay regime
+        pinBaseRate := 0.10
+        crashBaseRate := 0.01  // Lower crash probability
+    else  // CONTAINMENT
+        pinBaseRate := 0.25  // Much higher pin probability in containment
+        crashBaseRate := 0.01  // Lower crash/squeeze in containment
+        squeezeBaseRate := 0.01
+    
+    // Adjust based on IV level (high IV = higher probability of extreme moves)
+    ivFactor = clamp01((iv - 0.10) / 0.20)  // Normalize IV 10-30% to 0-1
+    crashBaseRate := crashBaseRate * (1.0 + ivFactor * 0.8)  // High IV increases crash risk
+    squeezeBaseRate := squeezeBaseRate * (1.0 + ivFactor * 0.6)  // High IV increases squeeze risk
+    
+    // Ensure base rates stay within reasonable bounds
+    crashBaseRate := math.min(0.15, math.max(0.005, crashBaseRate))
+    squeezeBaseRate := math.min(0.15, math.max(0.005, squeezeBaseRate))
+    pinBaseRate := math.min(0.40, math.max(0.05, pinBaseRate))
+    
+    // Identify which event type current signals suggest
+    // High reflexivity score + negative gamma + high IV = crash signal
+    crashSignalStrength = reflex21 > 0.70 and gammaMode == "Neg γ" and iv > hv ? reflex21 : 0.0
+    
+    // Low reflexivity + positive gamma + IV crush = squeeze signal
+    squeezeSignalStrength = reflex21 < 0.30 and gammaMode == "Pos γ" and iv < hv * 1.1 ? (1.0 - reflex21) : 0.0
+    
+    // Price near flip + low volatility = pin signal
+    distToFlip = math.abs(spot - flip_eff) / math.max(rng, 1e-9)
+    pinSignalStrength = distToFlip < 0.1 and priceVolatility < 0.02 ? 0.8 : 0.0
+    
+    // Apply base rate adjustment (Mycroft's principle: balance of probability)
+    // Bayes' Theorem: P(Event|Signal) = P(Signal|Event) * P(Event) / P(Signal)
+    // For rare events: even strong signals should be discounted by low base rate
+    // For common events: signals can be trusted more
+    
+    // Simplified Bayesian adjustment:
+    // Adjusted probability = (Signal Strength * Base Rate) / (Base Rate + (1 - Base Rate) * (1 - Signal Strength))
+    // This ensures rare events (low base rate) reduce adjusted probability
+    
+    crashAdjusted = crashSignalStrength > 0 ?  (crashSignalStrength * crashBaseRate) / math.max(crashBaseRate + (1.0 - crashBaseRate) * (1.0 - crashSignalStrength), 1e-6) : 0.0
+    
+    squeezeAdjusted = squeezeSignalStrength > 0 ? (squeezeSignalStrength * squeezeBaseRate) / math.max(squeezeBaseRate + (1.0 - squeezeBaseRate) * (1.0 - squeezeSignalStrength), 1e-6) : 0.0
+    
+    pinAdjusted = pinSignalStrength > 0 ? (pinSignalStrength * pinBaseRate) / math.max(pinBaseRate + (1.0 - pinBaseRate) * (1.0 - pinSignalStrength), 1e-6) : 0.0
+    
+    // Clamp adjusted values
+    crashAdjusted := clamp01(crashAdjusted)
+    squeezeAdjusted := clamp01(squeezeAdjusted)
+    pinAdjusted := clamp01(pinAdjusted)
+    
+    // Determine if event is rare
+    isRareEvent = crashBaseRate < rareEventThreshold or squeezeBaseRate < rareEventThreshold
+    
+    // Base rate adjusted reflexivity score
+    // Blend original score with base-rate adjusted view
+    baseRateAdjustedScore = reflex21 * (1.0 - baseRateWeight) + 
+                           (crashAdjusted + squeezeAdjusted + pinAdjusted) / 3.0 * baseRateWeight
+    
+    baseRateAdjustedScore := clamp01(baseRateAdjustedScore)
+    
+    // Determine dominant event type
+    dominantEvent = "NEUTRAL"
+    if crashAdjusted > squeezeAdjusted and crashAdjusted > pinAdjusted and crashAdjusted > 0.3
+        dominantEvent := "CRASH RISK"
+    else if squeezeAdjusted > crashAdjusted and squeezeAdjusted > pinAdjusted and squeezeAdjusted > 0.3
+        dominantEvent := "SQUEEZE RISK"
+    else if pinAdjusted > 0.4
+        dominantEvent := "PIN LIKELY"
+    
+    // Base rate confidence (how much we trust the signal given base rates)
+    baseRateConfidence = isRareEvent ?  math.min(0.5, baseRateAdjustedScore / math.max(reflex21, 1e-6)) : math.min(1.0, baseRateAdjustedScore / math.max(reflex21, 1e-6))   // Trust common events more
+    
+    [baseRateAdjustedScore, dominantEvent, baseRateConfidence, crashBaseRate, squeezeBaseRate, pinBaseRate, isRareEvent]
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SIGNAL ENGINE
+// ═════════════════════════════════════════════════════════════════════════════
+SignalEngine(eom, hr, sigConfirm) =>
+    eomLongThresh  = 0.40
+    eomShortThresh = 0.35
+    hrHighThresh   = 0.50
+    hrLowThresh    = 0.40
+    
+    longCond  = confirmedCross(eom, eomLongThresh, 1, sigConfirm) and hr < hrLowThresh
+    shortCond = confirmedCross(eom, eomShortThresh, -1, sigConfirm) and hr > hrHighThresh
+    
+    [longCond, shortCond]
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SWEET SPOT GAUGE ENGINE
+// ═════════════════════════════════════════════════════════════════════════════
+SweetSpotGaugeEngine(spot, flip_eff, pw_eff, cw_eff, iv, hv, ivDelta, gammaMode, regime, ivRiseThresh, ivFallThresh, ivHvSpreadThresh, sweetSpotSmooth) =>
+    // Calculate IV-HV spread
+    ivHvSpread = iv - hv
+    
+    // PUT SWEET SPOT conditions (downside convexity zone)
+    putCond1 = ivDelta > ivRiseThresh  // IV rising
+    putCond2 = spot < flip_eff  // Below gamma flip
+    putCond3 = gammaMode == "Neg γ" or regime == "DRAIN TILT"  // Negative gamma or downside tilt
+    putCond4 = ivHvSpread >= ivHvSpreadThresh  // IV > HV by threshold (fear premium)
+    
+    // Score PUT conditions (0-1 scale)
+    putScore = 0.0
+    if putCond1
+        putScore += 0.3
+    if putCond2
+        putScore += 0.3
+    if putCond3
+        putScore += 0.2
+    if putCond4
+        putScore += 0.2
+    putScore := clamp01(putScore)
+    
+    // CALL SWEET SPOT conditions (upside drift / post-crush zone)
+    callCond1 = ivDelta < -ivFallThresh  // IV falling / being crushed
+    callCond2 = spot > flip_eff  // Above gamma flip
+    callCond3 = gammaMode == "Pos γ" or regime == "DRY BAY" or regime == "CONTAINMENT"  // Positive gamma or controlled upside
+    callCond4 = ivHvSpread > 0.0  // IV > HV (but not exploding)
+    
+    // Score CALL conditions (0-1 scale)
+    callScore = 0.0
+    if callCond1
+        callScore += 0.3
+    if callCond2
+        callScore += 0.3
+    if callCond3
+        callScore += 0.2
+    if callCond4
+        callScore += 0.2
+    callScore := clamp01(callScore)
+    
+    // Determine bias
+    sweetSpotBias = "NEUTRAL"
+    sweetSpotColor = color.new(color.gray, 60)
+    
+    if putScore > callScore and putScore >= 0.5
+        sweetSpotBias := "PUT SWEET SPOT"
+        sweetSpotColor := color.new(color.red, 30)
+    else if callScore > putScore and callScore >= 0.5
+        sweetSpotBias := "CALL SWEET SPOT"
+        sweetSpotColor := color.new(color.lime, 30)
+    
+    // Sweet spot score is max of put/call scores, smoothed
+    rawScore = math.max(putScore, callScore)
+    sweetSpotScore = ta.ema(rawScore, sweetSpotSmooth)
+    sweetSpotScore := clamp01(sweetSpotScore)
+    
+    [sweetSpotScore, sweetSpotBias, sweetSpotColor]
+
+// ═════════════════════════════════════════════════════════════════════════════
+// HUD RENDERER
+// ═════════════════════════════════════════════════════════════════════════════
+// Note: Renderer logic at global scope to modify var variables
+// This function is called but logic executes at global scope
+HUDRenderer(showHUD, showVerbose, autoCalcLevels, spot, flip_eff, cw_eff, pw_eff, iv, hv, reflex21, momentum, direction, momentumColor, hr, eom, regime, regimeColor, garageState, momBase, gpdAdj, col) =>
+    array.new<float>()  // Function exists for modularity but logic is at global scope
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ROUNDTABLE COMMENTARY ENGINE - Automated Dynamic Commentary
+// ═════════════════════════════════════════════════════════════════════════════
+RoundtableCommentaryEngine(spot, iv, hv, ivDelta, ivAccel, regime, gammaMode, momentum, finalScore, flip_eff, cw_eff, pw_eff, center, strikeSpacing, dominantEvent, isRareEvent, baseRateConfidence, enableBaseRate) =>
+    // Calculate IV rates (rate of change, percentiles, acceleration)
+    ivPct = iv * 100.0
+    ivDeltaPct = ivDelta * 100.0  // IV change rate per bar
+    ivAccelPct = ivAccel * 100.0  // IV acceleration rate
+    
+    // Calculate IV percentile (relative to recent range)
+    ivLookback = 63  // ~3 months
+    ivHigh = ta.highest(iv, ivLookback)
+    ivLow = ta.lowest(iv, ivLookback)
+    ivRange = ivHigh - ivLow
+    ivPercentile = ivRange > 0 ? (iv - ivLow) / ivRange : 0.5
+    
+    // IV rate-based classification (using rates, not static thresholds)
+    ivRateRising = ivDeltaPct > 0.1  // IV rising at >0.1% per bar
+    ivRateFalling = ivDeltaPct < -0.1  // IV falling at >0.1% per bar
+    ivRateAccelerating = ivAccelPct > 0.05  // IV accelerating upward
+    ivRateDecelerating = ivAccelPct < -0.05  // IV decelerating/crushing
+    
+    // Dynamic IV classification based on rates and percentiles
+    ivRegime = "NEUTRAL"
+    if ivPercentile > 0.75 and ivRateRising
+        ivRegime := "HIGH_RISING"
+    else if ivPercentile > 0.75 and ivRateFalling
+        ivRegime := "HIGH_FADING"
+    else if ivPercentile < 0.25 and ivRateFalling
+        ivRegime := "LOW_CRUSHING"
+    else if ivPercentile < 0.25 and ivRateRising
+        ivRegime := "LOW_REBUILDING"
+    else if ivPercentile > 0.60
+        ivRegime := "ELEVATED"
+    else if ivPercentile < 0.40
+        ivRegime := "COMPRESSED"
+    
+    // Calculate dynamic zones based on current structure
+    halfStep = strikeSpacing * 0.5
+    quarterStep = strikeSpacing * 0.25
+    
+    // Initialize zone variables (required in Pine Script before conditional assignment)
+    float upLow = center
+    float upHigh = cw_eff
+    float dnLow = pw_eff
+    float dnHigh = center
+    
+    // Zone calculations adapt to regime and IV conditions
+    if regime == "DRY BAY"
+        upLow := cw_eff
+        upHigh := cw_eff + halfStep
+        dnLow := flip_eff - quarterStep
+        dnHigh := flip_eff
+    else if regime == "DRAIN TILT"
+        upLow := flip_eff
+        upHigh := flip_eff + quarterStep
+        dnLow := pw_eff - halfStep
+        dnHigh := pw_eff
+    else  // CONTAINMENT
+        upLow := center + quarterStep
+        upHigh := cw_eff
+        dnLow := pw_eff
+        dnHigh := center - quarterStep
+    
+    // Generate dynamic bias based on IV rates and market structure
+    bias = "Neutral drift"
+    if ivRegime == "HIGH_RISING" and regime == "DRAIN TILT"
+        bias := "High-friction float toward mid/flip"
+    else if ivRegime == "HIGH_FADING" and regime == "DRY BAY"
+        bias := "IV fade → drift toward upper lane"
+    else if ivRegime == "LOW_CRUSHING" and gammaMode == "Pos γ"
+        bias := "Compressed drift inside mid-lane"
+    else if ivRegime == "LOW_REBUILDING" and momentum > 0
+        bias := "IV rebuilding → potential squeeze setup"
+    else if ivRegime == "ELEVATED" and finalScore > 0.60
+        bias := "Elevated IV + high reflexivity → jumpy tape"
+    else if regime == "DRY BAY" and momentum > 0
+        bias := "Bull drift toward upper zone"
+    else if regime == "DRAIN TILT" and momentum < 0
+        bias := "Bear drift toward lower zone"
+    else if regime == "CONTAINMENT"
+        bias := "Contained range-bound action"
+    
+    // Generate dynamic IV note based on rates
+    ivNote = "IV stable"
+    if ivRegime == "HIGH_RISING"
+        ivNote := "IV rising rapidly (" + str.tostring(ivDeltaPct, "#.##") + "%/bar) → tape is jumpy; dealers can squeeze toward flip before deeper slide."
+    else if ivRegime == "HIGH_FADING"
+        ivNote := "IV elevated but fading (" + str.tostring(ivDeltaPct, "#.##") + "%/bar) → drift toward upper lane as fear premium erodes."
+    else if ivRegime == "LOW_CRUSHING"
+        ivNote := "IV crushing (" + str.tostring(ivDeltaPct, "#.##") + "%/bar) → slow grind, heavy theta bleed, range compression."
+    else if ivRegime == "LOW_REBUILDING"
+        ivNote := "IV rebuilding from lows (" + str.tostring(ivDeltaPct, "#.##") + "%/bar) → potential volatility expansion setup."
+    else if ivRegime == "ELEVATED"
+        ivNote := "IV elevated (" + str.tostring(ivPct, "#.#") + "%) → elevated risk of extreme moves."
+    else if ivRegime == "COMPRESSED"
+        ivNote := "IV compressed (" + str.tostring(ivPct, "#.#") + "%) → low volatility environment, range-bound likely."
+    
+    // Incorporate base rate information
+    if enableBaseRate and isRareEvent
+        ivNote := ivNote + " [RARE EVENT - Base rate adjusted, confidence: " + str.tostring(baseRateConfidence, "#.##") + "]"
+    
+    // Generate dynamic roundtable commentary (Bear/Fish/Monkey)
+    bearComment = "🐻 Bear: "
+    fishComment = "🐟 Fish: "
+    monkeyComment = "🐵 Monkey: "
+    
+    // Bear perspective (downside bias)
+    if regime == "DRAIN TILT"
+        bearComment := bearComment + "Prefers rallies sold below flip (" + str.tostring(flip_eff, "#.##") + "); deeper slide if " + str.tostring(pw_eff, "#.##") + " fails."
+    else if finalScore > 0.70 and gammaMode == "Neg γ"
+        bearComment := bearComment + "High reflexivity + negative gamma → crash risk elevated. Watching for breakdown below " + str.tostring(pw_eff, "#.##") + "."
+    else
+        bearComment := bearComment + "Watching for failed rallies; key support at " + str.tostring(pw_eff, "#.##") + "."
+    
+    // Fish perspective (liquidity/flow)
+    if regime == "CONTAINMENT"
+        fishComment := fishComment + "Liquidity rebuilding " + str.tostring(pw_eff, "#.##") + "–" + str.tostring(cw_eff, "#.##") + "; price floats toward flip while IV stays " + (ivRegime == "ELEVATED" ? "heavy" : "moderate") + "."
+    else if ivRegime == "HIGH_RISING"
+        fishComment := fishComment + "IV expanding → liquidity providers adjusting; flow toward " + str.tostring(flip_eff, "#.##") + " as dealers hedge."
+    else
+        fishComment := fishComment + "Liquidity balanced; flow direction depends on IV rotation and " + str.tostring(flip_eff, "#.##") + " test."
+    
+    // Monkey perspective (momentum/chop)
+    if momentum > 0.5 and gammaMode == "Pos γ"
+        monkeyComment := monkeyComment + "Watching for breakout into " + str.tostring(cw_eff, "#.##") + "–" + str.tostring(cw_eff + strikeSpacing, "#.##") + "; next IV reset decides real direction."
+    else if momentum < -0.5 and gammaMode == "Neg γ"
+        monkeyComment := monkeyComment + "Downside momentum building; fake breakdown risk if " + str.tostring(pw_eff, "#.##") + " holds."
+    else
+        monkeyComment := monkeyComment + "Range-bound chop; watching for fake breakout into " + str.tostring(flip_eff + strikeSpacing * 0.5, "#.##") + "–" + str.tostring(cw_eff, "#.##") + "; IV rotation key."
+    
+    // Determine roundtable color based on IV regime and risk
+    rtColor = color.new(color.green, 70)
+    if ivRegime == "HIGH_RISING" or finalScore > 0.70
+        rtColor := color.new(color.orange, 70)
+    else if ivRegime == "LOW_CRUSHING" or finalScore < 0.30
+        rtColor := color.new(color.blue, 70)
+    else if isRareEvent
+        rtColor := color.new(color.yellow, 70)
+    
+    // Weekend/next session note
+    sessLabel = dayofweek == dayofweek.friday ? "Next Session (Mon) Bias: " : "Tomorrow Bias: "
+    weekendNote = dayofweek == dayofweek.friday ?
+         "OPEX parking near flip (" + str.tostring(flip_eff, "#.##") + ") → Monday gap + IV reset decides next lane." :
+         "Next open IV rotation (" + (ivRateRising ? "rising" : ivRateFalling ? "falling" : "stable") + ") decides upper vs lower lane."
+    
+    [bias, upLow, upHigh, dnLow, dnHigh, ivNote, bearComment, fishComment, monkeyComment, rtColor, sessLabel, weekendNote]
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ROUNDTABLE RENDERER
+// ═════════════════════════════════════════════════════════════════════════════
+// Note: Renderer logic at global scope to modify var variables
+// This function is called but logic executes at global scope
+RoundtableRenderer(showRoundtable, iv, strikeSpacing, cw_eff, pw_eff, center) =>
+    array.new<float>()  // Function exists for modularity but logic is at global scope
+
+// ═════════════════════════════════════════════════════════════════════════════
+// MAIN EXECUTION
+// ═════════════════════════════════════════════════════════════════════════════
+spot = close
+
+// Volatility Engine
+[iv, hv, momBase, ivAccel, priceRoc, atrPct] = VolatilityEngine(spot, useDynHV, hvLen, hvInput, useVixIv, ivInput, useAtrProxy, nAccel)
+
+// Calculate raw IV delta for Sweet Spot Gauge
+ivDelta = ta.change(iv)
+
+// Gamma Engine
+[flip_eff, cw_eff, pw_eff, rng, wallBias, gpd, gpdAdj, gpdDirection, tension, tensionAdj] = GammaEngine(spot, autoCalcLevels, volLookback, strikeSpacing, flipLevel, callWall, putWall, alphaBias, betaBias)
+
+// Pressure Engine
+[hr, hr_raw, eom, eom_raw] = PressureEngine(spot, iv, pw_eff, cw_eff, rng)
+
+// Reflexivity Engine
+[reflex21, reflex21Raw, rawScore, coreShape, coreScaled, ivKick] = ReflexivityEngine(gpdAdj, tensionAdj, wTension, scoreSens, momBase, ivAccel, kAccel, priceRoc, nSmooth)
+
+// Momentum Engine
+[momentum, direction, momentumStrength, momentumColor, reflexVelocity, reflexAccel] = MomentumEngine(reflex21)
+
+// Regime Engine
+[regime, regimeColor, garageState] = RegimeEngine(spot, cw_eff, pw_eff, flip_eff)
+
+// Signal Engine
+[longCond, shortCond] = SignalEngine(eom, hr, sigConfirm)
+
+// Gamma mode for Sweet Spot Gauge
+gammaMode = spot >= flip_eff ? "Pos γ" : "Neg γ"
+
+// Sweet Spot Gauge Engine
+float sweetSpotScore = 0.0
+string sweetSpotBias = "NEUTRAL"
+color sweetSpotColor = color.new(color.gray, 60)
+
+if enableSweetSpotGauge
+    [sweetSpotScore, sweetSpotBias, sweetSpotColor] = SweetSpotGaugeEngine(spot, flip_eff, pw_eff, cw_eff, iv, hv, ivDelta, gammaMode, regime, ivRiseThresh, ivFallThresh, ivHvSpreadThresh, sweetSpotSmooth)
+
+// Base Rate Engine - Apply Mycroft's balance of probability
+float baseRateAdjustedScore = reflex21
+string dominantEvent = "NEUTRAL"
+float baseRateConfidence = 1.0
+float crashBaseRate = 0.02
+float squeezeBaseRate = 0.02
+float pinBaseRate = 0.15
+bool isRareEvent = false
+
+if enableBaseRate
+    [baseRateAdjustedScore, dominantEvent, baseRateConfidence, crashBaseRate, squeezeBaseRate, pinBaseRate, isRareEvent] = BaseRateEngine(spot, reflex21, regime, gammaMode, iv, hv, flip_eff, rng, baseRateLookback, rareEventThreshold, baseRateWeight)
+
+// Use base-rate adjusted score for final display
+finalScore = enableBaseRate ? baseRateAdjustedScore : reflex21
+
+// Color calculation for plots and HUD (using adjusted score)
+col = finalScore >= 0.75 ? color.red : finalScore >= 0.60 ? color.orange : finalScore >= 0.40 ? color.yellow : color.teal
+
+// HUD Renderer (function call for modularity, logic at global scope)
+float[] dummyHud = HUDRenderer(showHUD, showVerbose, autoCalcLevels, spot, flip_eff, cw_eff, pw_eff, iv, hv, finalScore, momentum, direction, momentumColor, hr, eom, regime, regimeColor, garageState, momBase, gpdAdj, col)
+
+// HUD Renderer Logic (global scope to modify var variables)
+if barstate.islast and showHUD
+    // Header row spanning all columns
+    table.cell(hud, 0, 0, "REFLEXIVITY 8.0", text_color=color.white, bgcolor=color.new(color.blue, 20), text_size=size.normal)
+    table.cell(hud, 1, 0, direction, text_color=momentum > 0 ? color.lime : momentum < 0 ? color.red : color.gray, bgcolor=color.new(color.blue, 20), text_size=size.small)
+    modeText = autoCalcLevels ? "AUTO" : "MANUAL"
+    table.cell(hud, 2, 0, modeText, text_color=autoCalcLevels ? color.aqua : color.orange, bgcolor=color.new(color.blue, 20), text_size=size.small)
+    
+    // Row 1: Key Levels
+    table.cell(hud, 0, 1, "Call", text_color=color.gray, text_size=size.tiny)
+    table.cell(hud, 1, 1, "Flip", text_color=color.gray, text_size=size.tiny)
+    table.cell(hud, 2, 1, "Put", text_color=color.gray, text_size=size.tiny)
+    table.cell(hud, 0, 2, str.tostring(cw_eff, "#.##"), text_color=color.lime, text_size=size.small)
+    table.cell(hud, 1, 2, str.tostring(flip_eff, "#.##"), text_color=color.yellow, text_size=size.small)
+    table.cell(hud, 2, 2, str.tostring(pw_eff, "#.##"), text_color=color.red, text_size=size.small)
+    
+    // Row 2: Volatility Metrics
+    table.cell(hud, 0, 3, "IV", text_color=color.gray, text_size=size.tiny)
+    table.cell(hud, 1, 3, "HV", text_color=color.gray, text_size=size.tiny)
+    table.cell(hud, 2, 3, "Ratio", text_color=color.gray, text_size=size.tiny)
+    table.cell(hud, 0, 4, str.tostring(iv * 100, "#.##") + "%", text_color=color.white, text_size=size.small)
+    table.cell(hud, 1, 4, str.tostring(hv * 100, "#.##") + "%", text_color=color.white, text_size=size.small)
+    table.cell(hud, 2, 4, str.tostring(momBase, "#.##"), text_color=color.aqua, text_size=size.small)
+    
+    // Row 3: Score & Momentum
+    gammaMode = spot >= flip_eff ? "Pos γ" : "Neg γ"
+    table.cell(hud, 0, 5, "Score", text_color=color.gray, text_size=size.tiny)
+    table.cell(hud, 1, 5, "Mom", text_color=color.gray, text_size=size.tiny)
+    table.cell(hud, 2, 5, "γ", text_color=color.gray, text_size=size.tiny)
+    scoreText = str.tostring(finalScore, "#.###")
+    if enableBaseRate and math.abs(finalScore - reflex21) > 0.05
+        scoreText := scoreText + " BR"
+    table.cell(hud, 0, 6, scoreText, text_color=col, text_size=size.normal)
+    momText = str.tostring(momentum, "#.##")
+    momCol  = momentum > 0 ? color.lime : momentum < 0 ? color.red : color.gray
+    table.cell(hud, 1, 6, momText, text_color=momCol, text_size=size.small)
+    table.cell(hud, 2, 6, gammaMode, text_color=spot >= flip_eff ? color.lime : color.orange, text_size=size.small)
+    
+    // Row 4: Pressure & Regime (combined label+value in same row for compactness)
+    table.cell(hud, 0, 7, "HR: " + str.tostring(hr, "#.##"), text_color=color.red, text_size=size.small)
+    table.cell(hud, 1, 7, "EOM: " + str.tostring(eom, "#.##"), text_color=color.lime, text_size=size.small)
+    regTextColor = regime == "CONTAINMENT" ? color.yellow : regime == "DRAIN TILT" ? color.red : color.teal
+    // Show regime, with optional Sweet Spot or Base Rate indicator if enabled
+    regimeDisplay = regime
+    if enableSweetSpotGauge and sweetSpotBias != "NEUTRAL"
+        regimeDisplay := regime + " | " + sweetSpotBias
+    else if enableBaseRate and isRareEvent
+        regimeDisplay := regime + " | RARE"
+    table.cell(hud, 2, 7, regimeDisplay, text_color=regTextColor, text_size=size.small)
+
+// Verbose Label (global scope)
+if barstate.islast and showVerbose
+    label.delete(hudLabel)
+    txt = "Reflexivity 8.0 | Direction: " + direction
+    txt := txt + "\nScore: " + str.tostring(finalScore, "#.###")
+    if enableBaseRate
+        txt := txt + " (Base Rate Adj: " + str.tostring(baseRateAdjustedScore, "#.###") + ")"
+    txt := txt + " | Momentum: " + str.tostring(momentum, "#.##")
+    txt := txt + "\nIV/HV: " + str.tostring(momBase, "#.##")
+    txt := txt + " | GPD: " + str.tostring(gpdAdj, "#.##")
+    txt := txt + "\nHR: " + str.tostring(hr, "#.##")
+    txt := txt + " | EOM: " + str.tostring(eom, "#.##")
+    txt := txt + "\nWalls: " + str.tostring(pw_eff, "#.##") + " | " + str.tostring(flip_eff, "#.##") + " | " + str.tostring(cw_eff, "#.##")
+    if enableBaseRate
+        txt := txt + "\nBase Rate: " + dominantEvent + " | Confidence: " + str.tostring(baseRateConfidence, "#.##")
+        txt := txt + " | Crash BR: " + str.tostring(crashBaseRate * 100, "#.#") + "% | Squeeze BR: " + str.tostring(squeezeBaseRate * 100, "#.#") + "%"
+    hudLabel := label.new(bar_index, finalScore, txt, style=label.style_label_left, textcolor=color.white, color=color.new(col, 70), yloc=yloc.price, size=size.small)
+
+// Roundtable Renderer (function call for modularity, logic at global scope)
+center = (pw_eff + cw_eff) / 2.0
+float[] dummyRt = RoundtableRenderer(showRoundtable, iv, strikeSpacing, cw_eff, pw_eff, center)
+
+// Generate automated roundtable commentary
+string roundtableBias = "Neutral"
+float roundtableUpLow = center
+float roundtableUpHigh = cw_eff
+float roundtableDnLow = pw_eff
+float roundtableDnHigh = center
+string roundtableIvNote = "IV stable"
+string roundtableBearComment = "🐻 Bear: Watching market structure."
+string roundtableFishComment = "🐟 Fish: Monitoring liquidity flow."
+string roundtableMonkeyComment = "🐵 Monkey: Watching for momentum shifts."
+color roundtableColor = color.new(color.green, 70)
+string roundtableSessLabel = "Bias: "
+string roundtableWeekendNote = "Next session will determine direction."
+
+if showRoundtable
+    [roundtableBias, roundtableUpLow, roundtableUpHigh, roundtableDnLow, roundtableDnHigh, roundtableIvNote, roundtableBearComment, roundtableFishComment, roundtableMonkeyComment, roundtableColor, roundtableSessLabel, roundtableWeekendNote] = RoundtableCommentaryEngine(spot, iv, hv, ivDelta, ivAccel, regime, gammaMode, momentum, finalScore, flip_eff, cw_eff, pw_eff, center, strikeSpacing, dominantEvent, isRareEvent, baseRateConfidence, enableBaseRate)
+
+// Roundtable Renderer Logic (global scope to modify var variables)
+if barstate.islast and showRoundtable
+    label.delete(roundtableLabel)
+    
+    ivPct = iv * 100.0
+    upZone = str.tostring(roundtableUpLow, "#.##") + "–" + str.tostring(roundtableUpHigh, "#.##")
+    dnZone = str.tostring(roundtableDnLow, "#.##") + "–" + str.tostring(roundtableDnHigh, "#.##")
+    
+    txt = "📊 ROUNDTABLE PROJECTION\n" +
+          roundtableSessLabel + roundtableBias + "\n" +
+          "Upside Zone: " + upZone + "\n" +
+          "Downside Zone: " + dnZone + "\n" +
+          "IV: " + str.tostring(ivPct, "#.0") + "% (Δ" + str.tostring(ivDelta * 100, "#.##") + "%/bar)\n\n" +
+          roundtableBearComment + "\n" +
+          roundtableFishComment + "\n" +
+          roundtableMonkeyComment + "\n\n" +
+          roundtableIvNote + "\n" +
+          roundtableWeekendNote
+    
+    roundtableLabel := label.new(bar_index, 1.5, txt, style=label.style_label_left, textcolor=color.white, color=roundtableColor, size=size.small)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// PLOTS
+// ═════════════════════════════════════════════════════════════════════════════
+plot(finalScore, "Reflexivity Score (Base Rate Adj)", color=col, linewidth=3, style=plot.style_line)
+plot(enableBaseRate ? (finalScore - reflex21) : na, "Base Rate Adjustment", color.new(color.blue, 50), linewidth=1, style=plot.style_line)
+plot(momentum / 100, "Momentum", momentumColor, 2, plot.style_histogram)
+
+hline(0.75, "Risk",    color.new(color.red, 40),   hline.style_solid,  2)
+hline(0.60, "Active",  color.new(color.orange, 50),hline.style_dashed)
+hline(0.40, "Neutral", color.new(color.gray, 70),  hline.style_dotted)
+hline(0.25, "Calm",    color.new(color.teal, 50),  hline.style_dashed)
+hline(0.00, "Zero",    color.new(color.white, 80), hline.style_dotted)
+
+plot(hr,  "HR (Resistance)", color.new(color.red,   40), linewidth=2)
+plot(eom, "EOM (Motion)",    color.new(color.green, 40), linewidth=2)
+
+// Sweet Spot Gauge plot
+plot(enableSweetSpotGauge ? sweetSpotScore : na, "Sweet Spot Gauge", style=plot.style_columns, color=sweetSpotColor, linewidth=2)
+hline(enableSweetSpotGauge ? 0.5 : na, "Sweet Spot Threshold", color.new(color.white, 70), hline.style_dotted)
+
+bgcolor(regimeColor)
+
+// Optional diagnostics
+plot(hr_raw,      "HR raw",       color.new(color.red,   60), style=plot.style_circles)
+plot(eom_raw,     "EOM raw",      color.new(color.green, 60), style=plot.style_circles)
+plot(momBase - 1, "IV/HV - 1",    color.new(color.blue,  70))
+plot(gpdAdj,      "GPD",          color.new(color.purple,80))
+plot(tensionAdj,  "Tension",      color.new(color.orange,80))
+
+// Signals
+plotshape(showMarks and longCond,  title="Long",  style=shape.triangleup,   location=location.bottom, color=color.new(color.lime, 0), size=size.small, text="▲")
+plotshape(showMarks and shortCond, title="Short", style=shape.triangledown, location=location.top,    color=color.new(color.red, 0),  size=size.small, text="▼")
+

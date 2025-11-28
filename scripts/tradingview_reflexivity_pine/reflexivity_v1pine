@@ -1,0 +1,132 @@
+//@version=5
+// ───────────────────────────────────────────────────────────────────────────────
+// REFLEXIVITY ENGINE V1.0 — DUAL FLIP
+// ───────────────────────────────────────────────────────────────────────────────
+// Purpose: Simple dual flip line indicator with basic IV/HV regime detection
+// Type: Overlay indicator (displays on price chart)
+// Key Features:
+//   - Dual flip lines: Upper (+1.5% offset) and Lower (-1.5% offset) from base flip
+//   - Base flip calculated from 200 SMA (or manual override)
+//   - VIX or manual IV input
+//   - IV/HV ratio regime classification: Low IV, Normal, High IV
+//   - Simple reflex score: -1 (Low IV), 0 (Normal), 1 (High IV)
+//   - Background tint based on IV regime
+//   - Basic HUD table with IV, HV, IV/HV, VIX, and flip levels
+// Use Case: Minimal overlay for quick IV regime assessment and flip level visualization
+// —— BACKGROUND COLOR REGIME INDICATORS ——————————————————————————————————————————
+// The background tint provides visual feedback about the IV/HV regime:
+// 
+// 🟢 GREEN TINT (Low IV Regime):
+//    - Condition: IV/HV ratio < 0.8
+//    - Meaning: Implied volatility is significantly lower than historical volatility
+//    - Interpretation: Market expects less future volatility than recent past suggests
+//    - Trading implication: Options may be relatively cheap; potential for volatility expansion
+//
+// 🔴 RED TINT (High IV Regime):
+//    - Condition: IV/HV ratio > 1.4
+//    - Meaning: Implied volatility is significantly higher than historical volatility
+//    - Interpretation: Market expects more future volatility than recent past suggests
+//    - Trading implication: Options may be relatively expensive; potential for volatility contraction
+//
+// ⚪ NO TINT (Normal IV Regime):
+//    - Condition: 0.8 <= IV/HV ratio <= 1.4
+//    - Meaning: Implied and historical volatility are relatively balanced
+//    - Interpretation: Market expectations align with recent realized volatility
+//    - Trading implication: Options pricing is relatively fair
+//
+
+// ───────────────────────────────────────────────────────────────────────────────
+indicator("Reflexivity Engine v1.0 — Dual Flip", overlay=true, shorttitle="Reflex v1.0")
+
+// —— INPUTS —————————————————————————————————————————————————————————————————————
+ivSource      = input.string("VIX", "IV Source", options=["VIX", "Manual"])
+manualIVpct   = input.float(20.0, "Manual IV % (if selected)", minval=0.0, step=1.0)
+manualIV      = manualIVpct / 100
+
+hvLookback    = input.int(20, "HV Lookback (days)", minval=5, maxval=60)
+flipInput     = input.float(0.0, "Manual Flip Point (0 = auto)", minval=0, step=0.01)
+flipOverride  = flipInput > 0 ? flipInput : na
+
+showHUD       = input.bool(true, "Show HUD & Indicators", group="Display")
+flipPctOffset = input.float(1.5, "Flip Offset %", minval=0.1, maxval=10.0, step=0.1) / 100  // 1.5% → 0.015
+
+// —— CORE CALCULATIONS ———————————————————————————————————————————————————————————
+vixRawClose = request.security("CBOE:VIX", "D", close)
+ivRaw = ivSource == "VIX" ? vixRawClose / 100 : manualIV
+
+logReturn = math.log(close / close[1])
+hvRaw = ta.stdev(logReturn, hvLookback) * math.sqrt(252)
+
+ivHvRatio = math.min(math.max(ivRaw / hvRaw, 0.5), 2.0)
+
+isLowIV   = ivHvRatio < 0.8
+isNormal  = ivHvRatio >= 0.8 and ivHvRatio <= 1.4
+isHighIV  = ivHvRatio > 1.4
+
+reflexScore = isLowIV ? -1 : isNormal ? 0 : 1
+
+flipPoint() =>
+    ta.sma(close, 200)
+
+baseFlip = not na(flipOverride) ? flipOverride : flipPoint()
+flipUpper = baseFlip * (1 + flipPctOffset)  // e.g., +1.5%
+flipLower = baseFlip * (1 - flipPctOffset)  // e.g., -1.5%
+
+// —— HELPER FUNCTION —————————————————————————————————————————————————————————————
+f_fmt(val, fmt) =>
+    str.tostring(val, fmt)
+
+// —— DYNAMIC PLOTS (global scope) ——————————————————————————————————————————————
+// Base flip (thin, neutral)
+baseColor = showHUD ? color.new(color.blue, 90) : na
+plot(baseFlip, "Base Flip", color=baseColor, style=plot.style_line, linewidth=1, trackprice=false)
+
+// Upper & Lower flips (bold, regime-aware opacity)
+upperColor = showHUD ? color.new(color.red,   isHighIV ? 20 : 60) : na
+lowerColor = showHUD ? color.new(color.green, isLowIV  ? 20 : 60) : na
+
+plot(flipUpper, "Flip +", color=upperColor, style=plot.style_line, linewidth=2, trackprice=true)
+plot(flipLower, "Flip -", color=lowerColor, style=plot.style_line, linewidth=2, trackprice=true)
+
+// —— VISUAL LABELS (local scope OK) ———————————————————————————————————————————
+if showHUD
+    // Regime label
+    var label regimeLabel = na
+    if barstate.islast
+        label.delete(regimeLabel)
+        regimeTxt = isLowIV ? "📉 Low IV" : isHighIV ? "📈 High IV" : "➡️ Normal"
+        regimeColor = isLowIV ? color.green : isHighIV ? color.red : color.orange
+        regimeLabel := label.new( x=bar_index, y=high * 1.005, text=regimeTxt, color=color.new(regimeColor, 95), textcolor=regimeColor, style=label.style_label_center, yloc=yloc.price, size=size.small)
+
+// —— ENHANCED HUD ————————————————————————————————————————————————————————————————
+if showHUD
+    var table debugTable = table.new(position.bottom_right, 2, 7,
+         frame_color=color.new(color.gray, 60),
+         frame_width=1,
+         bgcolor=color.new(color.black, 60))
+
+    if bar_index % 5 == 0 or barstate.islast
+        table.cell(debugTable, 0, 0, "IV",      text_color=color.gray,    text_size=size.small)
+        table.cell(debugTable, 1, 0, f_fmt(ivRaw * 100, "#.##") + "%", text_color=color.orange,  text_size=size.small)
+
+        table.cell(debugTable, 0, 1, "HV",      text_color=color.gray,    text_size=size.small)
+        table.cell(debugTable, 1, 1, f_fmt(hvRaw * 100, "#.##") + "%", text_color=color.teal,    text_size=size.small)
+
+        table.cell(debugTable, 0, 2, "IV/HV",   text_color=color.gray,    text_size=size.small)
+        ivHvColor = ivHvRatio > 1.4 ? color.red : ivHvRatio < 0.8 ? color.green : color.yellow
+        table.cell(debugTable, 1, 2, f_fmt(ivHvRatio, "#.##"), text_color=ivHvColor, text_size=size.small)
+
+        table.cell(debugTable, 0, 3, "VIX",     text_color=color.gray,    text_size=size.small)
+        table.cell(debugTable, 1, 3, f_fmt(vixRawClose, "#.##"), text_color=color.purple, text_size=size.small)
+
+        table.cell(debugTable, 0, 4, "HV N",    text_color=color.gray,    text_size=size.small)
+        table.cell(debugTable, 1, 4, str.tostring(hvLookback), text_color=color.silver, text_size=size.small)
+
+        table.cell(debugTable, 0, 5, "Flip +",  text_color=color.gray,    text_size=size.small)
+        table.cell(debugTable, 1, 5, f_fmt(flipUpper, "#.##"), text_color=color.red, text_size=size.small)
+
+        table.cell(debugTable, 0, 6, "Flip -",  text_color=color.gray,    text_size=size.small)
+        table.cell(debugTable, 1, 6, f_fmt(flipLower, "#.##"), text_color=color.green, text_size=size.small)
+
+// —— Optional background tint
+bgcolor(showHUD and isLowIV  ? color.new(color.green, 98) : showHUD and isHighIV ? color.new(color.red, 98) : na)

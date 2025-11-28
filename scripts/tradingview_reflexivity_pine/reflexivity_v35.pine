@@ -1,0 +1,282 @@
+//@version=5
+indicator("GEX Regime Engine 3.5 — QQQ Leveraged Assist", overlay=true, max_labels_count=500)
+
+//────────────────────────────
+// INPUTS
+//────────────────────────────
+
+// GEX inputs (you can key these in from your external calc)
+gexValue   = input.float(0.0,  "Net GEX (M units)", step = 0.01)
+gexChange  = input.float(0.0,  "GEX Flow Δ Today (M)", step = 0.01)
+
+// Thresholds for regime classification (tune to taste)
+gexHighMag = input.float(0.50, "High |GEX| threshold (M)", step = 0.05)
+gexLowMag  = input.float(0.10, "Low |GEX| dead-zone (M)", step = 0.05)
+
+// Market-structure context
+callWall   = input.float(0.0, "Call Wall", step = 0.1)
+putWall    = input.float(0.0, "Put Wall", step = 0.1)
+gammaFlip  = input.float(0.0, "Gamma Flip", step = 0.1)
+
+// Display options
+useQQQMode = input.bool(true, "Show QQQ / TQQQ / SQQQ Hints")
+showRoundtable = input.bool(false, "Show Roundtable", group="Display")
+showWalls = input.bool(true, "Show Walls", group="Display")
+
+// Use last close as our “current spot”
+spot       = close
+
+//────────────────────────────
+// DERIVED GEX REGIME
+//────────────────────────────
+
+gexAbs   = math.abs(gexValue)
+posGex   = gexValue >  0
+negGex   = gexValue <  0
+flatGex  = gexAbs  <  gexLowMag
+
+// Regime labels
+gexRegime = flatGex                          ? "Neutral / Low GEX" : posGex and gexAbs >= gexHighMag  ? "High +Gamma (Pin / Suppress)" : posGex                           ? "Soft +Gamma (Mild Pin)" :  negGex and gexAbs >= gexHighMag  ? "High -Gamma (Accel / Breakout Risk)" : "Soft -Gamma (Skewed / Choppy)"
+
+// Direction arrow from GEX flow
+gexDir = gexChange >  0 ? "↑ Call Flow" :
+         gexChange <  0 ? "↓ Put Flow"  :
+                          "⇄ Flat Flow"
+
+//────────────────────────────
+// HEATMAP BACKGROUND BY REGIME
+//────────────────────────────
+
+// Alpha scaled by |GEX|, capped for visibility
+alphaScale = math.min(85.0, gexAbs / gexHighMag * 85.0)
+
+// Choose base color by sign
+gexColor =
+     flatGex ? color.new(color.gray,  90) :
+     posGex  ? color.new(color.green, 100 - alphaScale) :
+               color.new(color.red,   100 - alphaScale)
+
+// Apply background tint
+bgcolor(gexColor)
+
+//────────────────────────────
+// POSITION VS WALLS / FLIP
+//────────────────────────────
+
+aboveCall  = spot > callWall   and callWall  != 0.0
+belowPut   = spot < putWall    and putWall   != 0.0
+aboveFlip  = spot > gammaFlip  and gammaFlip != 0.0
+belowFlip  = spot < gammaFlip  and gammaFlip != 0.0
+
+// Basic bias logic (index-level)
+bias =
+     negGex and aboveCall  ? "Squeeze-up prone (dealers buy into strength)" :
+     negGex and belowPut   ? "Flush-down prone (dealers sell into weakness)" :
+     posGex and aboveCall  ? "Upside suppressed (mean-revert toward walls)" :
+     posGex and belowPut   ? "Downside suppressed (bounce risk from puts)" :
+     flatGex               ? "Low GEX: path dominated by flows / headlines" :
+                              "Mixed: watch walls & IV for next cue"
+
+openHint =
+     negGex and aboveFlip          ? "If we open above flip, upside gaps can accelerate." :
+     negGex and belowFlip          ? "If we open below flip, downside gaps can cascade." :
+     posGex and gexAbs >= gexHighMag ? "High +Gamma: open likely to gravitate back toward walls." :
+                                       "Next open: watch for shift in GEX sign or magnitude."
+
+//────────────────────────────
+// QQQ / TQQQ / SQQQ TRADE HINT ENGINE
+//────────────────────────────
+
+// Regime scores
+isHighNeg  = negGex and gexAbs >= gexHighMag
+isSoftNeg  = negGex and not flatGex and gexAbs < gexHighMag
+isHighPos  = posGex and gexAbs >= gexHighMag
+isSoftPos  = posGex and not flatGex and gexAbs < gexHighMag
+isDeadZone = flatGex
+
+// Simple aggressiveness score: 0 = no-trade, 1 = light, 2 = full
+regimeScore =
+     isDeadZone ? 0 :
+     isHighNeg  ? 2 :
+     isHighPos  ? 2 :
+     isSoftNeg or isSoftPos ? 1 : 0
+
+// Map to leveraged QQQ bias
+var string qqqBias    = ""
+var string qqqEtfHint = ""
+var string qqqRiskTag = ""
+
+if useQQQMode
+    if regimeScore == 0
+        qqqBias    := "No hero trades — Low / noisy GEX. Treat TQQQ/SQQQ as scalps only."
+        qqqEtfHint := "Preferred: CASH / unlevered QQQ. Keep size tiny if trading."
+        qqqRiskTag := "Holiday / low-structure regime → avoid size."
+    else
+        // Direction: combine GEX sign + flow Δ
+        bullTilt =  (isHighPos or isSoftPos) and gexChange >= 0
+        bearTilt =  (isHighNeg or isSoftNeg) and gexChange <= 0
+
+        if bullTilt
+            qqqBias    := "Bullish QQQ tilt (pins / squeezes up favored)."
+            qqqEtfHint := regimeScore == 2 ? "Preferred: TQQQ LONG (core), SQQQ only for scalps." :
+                                              "Preferred: TQQQ LONG small; avoid oversized entries."
+            qqqRiskTag := "Use tight hard stops (e.g. -0.50 / -0.40 on the ETF leg)."
+        else if bearTilt
+            qqqBias    := "Bearish QQQ tilt (flush / breakdown risk)."
+            qqqEtfHint := regimeScore == 2 ? "Preferred: SQQQ LONG (core), TQQQ only for bounce scalps." :
+                                              "Preferred: SQQQ LONG small; avoid late chases."
+            qqqRiskTag := "Use tight hard stops (e.g. -0.50 / -0.40 on the ETF leg)."
+        else
+            qqqBias    := "Mixed / crossed flows. Directional edge unclear."
+            qqqEtfHint := "Preferred: scalp-only TQQQ/SQQQ or step aside."
+            qqqRiskTag := "Wait for morning regime (first 15–30 minutes) to confirm direction."
+
+//────────────────────────────
+// CLEAN, READABLE TABLE HUD (TOP RIGHT)
+//────────────────────────────
+
+if barstate.islast
+    var table mainTable = table.new(position.top_right, 2, 4,
+         frame_color=color.new(color.white, 70),
+         frame_width=2,
+         bgcolor=color.new(color.black, 85),
+         border_width=1,
+         border_color=color.new(color.gray, 50))
+    
+    // Color coding
+    regimeColor = flatGex ? color.gray : posGex ? color.green : color.red
+    
+    // Row 0: GEX value (LARGE, BOLD - most important)
+    table.cell(mainTable, 0, 0, "GEX", 
+         text_color=color.white, 
+         text_size=size.normal, 
+         bgcolor=color.new(regimeColor, 60))
+    table.cell(mainTable, 1, 0, str.tostring(gexValue, "#.00") + "M", 
+         text_color=regimeColor, 
+         text_size=size.large, 
+         bgcolor=color.new(regimeColor, 60))
+    
+    // Row 1: Flow direction (clear symbol)
+    flowSymbol = gexChange > 0 ? "↑" : gexChange < 0 ? "↓" : "⇄"
+    flowColor = gexChange > 0 ? color.lime : gexChange < 0 ? color.orange : color.gray
+    table.cell(mainTable, 0, 1, "Flow", 
+         text_color=color.new(color.white, 20), 
+         text_size=size.normal)
+    table.cell(mainTable, 1, 1, flowSymbol + " " + str.tostring(gexChange, "#.00") + "M", 
+         text_color=flowColor, 
+         text_size=size.normal)
+    
+    // Row 2: Regime (short, clear)
+    regimeShort = flatGex ? "Neutral" : posGex and gexAbs >= gexHighMag ? "+Γ High" : posGex ? "+Γ Soft" : negGex and gexAbs >= gexHighMag ? "-Γ High" : "-Γ Soft"
+    table.cell(mainTable, 0, 2, "Regime", 
+         text_color=color.new(color.white, 20), 
+         text_size=size.normal)
+    table.cell(mainTable, 1, 2, regimeShort, 
+         text_color=regimeColor, 
+         text_size=size.normal)
+    
+    // Row 3: Bias (ultra-short, no explanations)
+    biasSymbol = negGex and aboveCall ? "↑" : negGex and belowPut ? "↓" : posGex and aboveCall ? "↓" : posGex and belowPut ? "↑" : "—"
+    biasText = negGex and aboveCall ? "Squeeze" : negGex and belowPut ? "Flush" : posGex and aboveCall ? "Revert" : posGex and belowPut ? "Bounce" : flatGex ? "Low" : "Mixed"
+    table.cell(mainTable, 0, 3, "Bias", 
+         text_color=color.new(color.white, 20), 
+         text_size=size.normal)
+    table.cell(mainTable, 1, 3, biasSymbol + " " + biasText, 
+         text_color=color.yellow, 
+         text_size=size.normal)
+
+//────────────────────────────
+// WALLS/FLIP (OPTIONAL, TOP LEFT)
+//────────────────────────────
+
+if showWalls and barstate.islast and (callWall != 0.0 or putWall != 0.0 or gammaFlip != 0.0)
+    var table wallsTable = table.new(position.top_left, 2, 3,
+         frame_color=color.new(color.gray, 60),
+         frame_width=2,
+         bgcolor=color.new(color.black, 85),
+         border_width=1)
+    
+    rowIdx = 0
+    if callWall != 0.0
+        table.cell(wallsTable, 0, rowIdx, "Call", 
+             text_color=color.new(color.white, 20), 
+             text_size=size.normal)
+        table.cell(wallsTable, 1, rowIdx, str.tostring(callWall, "#.00"), 
+             text_color=color.red, 
+             text_size=size.normal)
+        rowIdx += 1
+    
+    if putWall != 0.0
+        table.cell(wallsTable, 0, rowIdx, "Put", 
+             text_color=color.new(color.white, 20), 
+             text_size=size.normal)
+        table.cell(wallsTable, 1, rowIdx, str.tostring(putWall, "#.00"), 
+             text_color=color.green, 
+             text_size=size.normal)
+        rowIdx += 1
+    
+    if gammaFlip != 0.0
+        table.cell(wallsTable, 0, rowIdx, "Flip", 
+             text_color=color.new(color.white, 20), 
+             text_size=size.normal)
+        table.cell(wallsTable, 1, rowIdx, str.tostring(gammaFlip, "#.00"), 
+             text_color=color.blue, 
+             text_size=size.normal)
+
+//────────────────────────────
+// QQQ MODE (BOTTOM RIGHT, IF ENABLED - CLEAN)
+//────────────────────────────
+
+if useQQQMode and barstate.islast
+    var table qqqTable = table.new(position.bottom_right, 2, 2,
+         frame_color=color.new(color.blue, 60),
+         frame_width=2,
+         bgcolor=color.new(color.black, 85),
+         border_width=1,
+         border_color=color.new(color.blue, 50))
+    
+    bullTilt = (isHighPos or isSoftPos) and gexChange >= 0
+    bearTilt = (isHighNeg or isSoftNeg) and gexChange <= 0
+    
+    qqqDir = bullTilt ? "🟢 TQQQ" : bearTilt ? "🔴 SQQQ" : "⚪ —"
+    qqqColor = bullTilt ? color.green : bearTilt ? color.red : color.gray
+    
+    table.cell(qqqTable, 0, 0, "QQQ", 
+         text_color=color.white, 
+         text_size=size.normal, 
+         bgcolor=color.new(color.blue, 60))
+    table.cell(qqqTable, 1, 0, qqqDir, 
+         text_color=qqqColor, 
+         text_size=size.large, 
+         bgcolor=color.new(color.blue, 60))
+    
+    table.cell(qqqTable, 0, 1, "Size", 
+         text_color=color.new(color.white, 20), 
+         text_size=size.normal)
+    sizeText = regimeScore == 2 ? "FULL" : regimeScore == 1 ? "SMALL" : "AVOID"
+    sizeColor = regimeScore == 2 ? color.orange : regimeScore == 1 ? color.yellow : color.gray
+    table.cell(qqqTable, 1, 1, sizeText, 
+         text_color=sizeColor, 
+         text_size=size.normal)
+
+//────────────────────────────
+// ROUNDTABLE (HIDDEN BY DEFAULT - REMOVED FOR CLARITY)
+//────────────────────────────
+
+// Roundtable removed to reduce clutter. Enable via input if needed.
+if showRoundtable and barstate.islast
+    var label rt = na
+    label.delete(rt)
+    
+    rtTxt = "📊 " + gexRegime + " | " + gexDir + "\n" +
+      "🐻 " + (negGex ? "-Γ trend" : posGex ? "+Γ revert" : "No edge") + "\n" +
+      "🐟 " + (gexChange > 0 ? "Call ↑" : gexChange < 0 ? "Put ↓" : "Flat") + "\n" +
+      "🐂 " + (isHighPos ? "Add dips" : isHighNeg ? "Hunt squeeze" : "Wait") + "\n" +
+      "💼 " + (negGex ? "Short γ" : posGex ? "Long γ" : "Light") + "\n" +
+      "→ " + bias
+    
+    rt := label.new(bar_index, low, rtTxt, 
+         style=label.style_label_left, 
+         textcolor=color.white, 
+         color=color.new(color.purple, 70), 
+         size=size.small)

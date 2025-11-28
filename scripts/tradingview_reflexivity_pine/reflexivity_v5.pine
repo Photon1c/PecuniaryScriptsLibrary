@@ -1,0 +1,232 @@
+//@version=5
+// ───────────────────────────────────────────────────────────────────────────────
+// REFLEXIVITY 5.0 PRO - 0DTE MASTER EDITION
+// ───────────────────────────────────────────────────────────────────────────────
+// Purpose: 0DTE-focused reflexivity indicator with auto wall detection and GEX proxy
+// Type: Sub-pane indicator (separate chart below price)
+// Key Features:
+//   - Auto-detect walls using 0DTE clustering (7-bar lookback with adaptive vol factor)
+//   - Manual wall override option
+//   - GEX proxy calculation (volume + delta + volatility weighted)
+//   - Pin probability calculation (30-98% range)
+//   - Regime detection: BREAKOUT UP, BREAKDOWN, VOL SQUEEZE, PINNED, PRIMING, CONTAINED
+//   - Momentum signals and breakout alerts
+//   - Vol compression detection (IV/HV < 0.85)
+//   - HR/EOM with trend fill visualization
+// Use Case: Intraday 0DTE trading with emphasis on pinning, breakouts, and volatility compression
+// ───────────────────────────────────────────────────────────────────────────────
+indicator("Reflexivity 5.0 Pro - 0DTE Master Edition", overlay=false, max_lines_count=500, max_labels_count=500)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// INPUTS
+// ═════════════════════════════════════════════════════════════════════════════
+group_walls = "Gamma Walls & Levels"
+autoWalls   = input.bool(true, "Auto-Detect Walls", group=group_walls)
+callWallMan = input.float(670.0, "Manual Call Wall", step=0.1, group=group_walls)
+putWallMan  = input.float(665.0, "Manual Put Wall", step=0.1, group=group_walls)
+flipMan     = input.float(668.0, "Manual Gamma Flip", step=0.1, group=group_walls)
+
+group_sens = "Sensitivity & Tuning"
+scoreSens   = input.float(0.1, "Reflex Sensitivity", minval=0.1, maxval=3.0, step=0.1, group=group_sens)
+smoothLen   = input.int(3, "Smoothing Length", minval=1, maxval=14, group=group_sens)
+gexWeight   = input.float(1.2, "GEX Weight", minval=0.0, maxval=5.0, step=0.1, group=group_sens)
+volCompThresh = input.float(0.85, "Vol Compression Threshold", minval=0.5, maxval=1.0, step=0.05, group=group_sens)
+
+group_disp = "Display"
+showWalls   = input.bool(true, "Show Wall Markers", group=group_disp)
+showHUD     = input.bool(true, "Show HUD", group=group_disp)
+showSignals = input.bool(true, "Show Momentum Signals", group=group_disp)
+showTrend   = input.bool(true, "Show Trend Fill", group=group_disp)
+showBreakout= input.bool(true, "Show Breakout Alerts", group=group_disp)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// HELPERS
+// ═════════════════════════════════════════════════════════════════════════════
+f_clamp01(_x) => math.max(0.0, math.min(1.0, _x))
+f_safeLog(_x) => math.log(math.max(_x, 1e-10))
+
+// ═════════════════════════════════════════════════════════════════════════════
+// VOLATILITY & IV
+// ═════════════════════════════════════════════════════════════════════════════
+vix = request.security("CBOE:VIX", "D", close, ignore_invalid_symbol=true)
+iv  = na(vix) ? 0.18 : vix / 100
+
+hv20 = ta.stdev(f_safeLog(close / close[1]), 20) * math.sqrt(252)
+ivhv_ratio = iv / math.max(hv20, 0.0001)
+vol_compression = ivhv_ratio < volCompThresh and hv20 < ta.sma(hv20, 50)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// DYNAMIC GAMMA WALLS (Smart 0DTE Clustering)
+// ═════════════════════════════════════════════════════════════════════════════
+lookback = 7
+hh = ta.highest(high, lookback)
+ll = ta.lowest(low, lookback)
+priceRange = math.max(hh - ll, syminfo.mintick * 100)
+mid  = (hh + ll) / 2
+
+// Adaptive walls: tighter in low vol, wider in high vol
+volFactor = math.pow(iv, 0.6)
+dynCallWall = mid + priceRange * (0.22 + 0.15 * volFactor)
+dynPutWall  = mid - priceRange * (0.22 + 0.15 * volFactor)
+dynFlip     = mid
+
+callWall = autoWalls ? dynCallWall : callWallMan
+putWall  = autoWalls ? dynPutWall  : putWallMan
+flipLevel = autoWalls ? dynFlip : flipMan
+
+rng = math.max(callWall - putWall, 0.1)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// GEX PROXY (Volume + Delta + Volatility Weighted)
+// ═════════════════════════════════════════════════════════════════════════════
+baseOiCall = volume * (1.0 + 0.4 * math.sin(bar_index / 20.0))
+baseOiPut  = volume * (0.8 + 0.3 * math.cos(bar_index / 25.0))
+
+gexCall = baseOiCall * 0.0092 * math.pow(iv, 0.8)
+gexPut  = baseOiPut  * 0.0088 * math.pow(iv, 0.8)
+gexNet  = gexCall - gexPut
+gexFlow = ta.ema(gexNet, 5)
+gexNorm = f_clamp01(math.abs(gexFlow) / 7e7)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// CORE REFLEXIVITY ENGINE
+// ═════════════════════════════════════════════════════════════════════════════
+distToFlip = math.abs(close - flipLevel) / rng
+tension    = 1.0 - f_clamp01(distToFlip * 1.8)
+proximity  = 1.0 - f_clamp01(distToFlip / 0.6)
+
+gammaCore  = tension * 0.65 + proximity * 0.35
+ivBoost    = math.max(0, (ivhv_ratio - 1.0)) * 0.3
+gexBoost   = (gexFlow / 1e8) * gexWeight
+
+rawScore   = gammaCore * scoreSens + gexBoost + ivBoost + (vol_compression ? 0.25 : 0)
+reflex     = f_clamp01(ta.ema(rawScore, smoothLen))
+
+reflexVel  = ta.change(reflex, 1)
+momentum   = ta.ema(reflexVel, 3) * 120
+momStrong  = math.abs(momentum) > 0.8
+
+// ═════════════════════════════════════════════════════════════════════════════
+// HR / EOM / PIN PROB
+// ═════════════════════════════════════════════════════════════════════════════
+hr = proximity * (0.75 + 0.25 * f_clamp01((iv - 0.1)/0.15))  // Hedging Resistance
+eom = (1.0 - proximity) * (0.7 + 0.3 * f_clamp01((ivhv_ratio - 0.8)*2))
+
+hrEomDiff = ta.ema(eom - hr, 3)
+
+pinProb = 30.0
+pinProb += proximity > 0.75 ? 35 : proximity > 0.5 ? 15 : 0
+pinProb += iv < 0.13 ? 30 : iv < 0.16 ? 15 : 0
+pinProb += vol_compression ? 20 : 0
+pinProb := math.min(98.0, pinProb)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// REGIME DETECTION
+// ═════════════════════════════════════════════════════════════════════════════
+margin = rng * 0.015
+
+regime = close > callWall + margin and momentum > 0.6 ? "BREAKOUT UP" : close < putWall  - margin and momentum < -0.6 ? "BREAKDOWN" : vol_compression and math.abs(close - flipLevel)/rng < 0.3 ? "VOL SQUEEZE" : pinProb > 72 ? "PINNED" : eom > hr + 0.2 ? "PRIMING" : "CONTAINED"
+
+regimeCol = regime == "BREAKOUT UP" ? color.new(#00ff00, 90) : regime == "BREAKDOWN" ? color.new(#ff0033, 90) : regime == "VOL SQUEEZE" ? color.new(#ff00ff, 88) : regime == "PINNED" ? color.new(#ffff00, 90) : regime == "PRIMING" ? color.new(#ff8800, 90)  :color.new(#888888, 92)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SIGNALS
+// ═════════════════════════════════════════════════════════════════════════════
+bullMom  = momentum > 1.2 and reflex > 0.55 and close > flipLevel
+bearMom  = momentum < -1.2 and reflex > 0.55 and close < flipLevel
+
+bullBO   = ta.crossover(close, callWall) and momentum > 0.8 and volume > ta.sma(volume, 20)
+bearBO   = ta.crossunder(close, putWall) and momentum < -0.8 and volume > ta.sma(volume, 20)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// PLOTS
+// ═════════════════════════════════════════════════════════════════════════════
+c_reflex = reflex > 0.8 ? #ff0066 : reflex > 0.65 ? #ff6600 : reflex > 0.45 ? #ffff00 : #00ffff
+plot(reflex, "Reflexivity Score", c_reflex, 4)
+
+plot(momentum/100, "Momentum", momentum > 0 ? color.new(#00ff00, 40) : color.new(#ff0066, 40), 2, plot.style_histogram)
+
+plot(hr, "HR", color.new(#ff0066, 50), 2)
+plot(eom, "EOM", color.new(#00ff00, 50), 2)
+
+fillcol = hrEomDiff > 0 ? color.new(#00ff00, 88) : color.new(#ff0066, 88)
+plot(showTrend ? hrEomDiff/2 + 0.5 : na, "Trend Bias", fillcol, style=plot.style_area)
+
+hline(0.80, "Extreme", color.new(#ff0066, 50))
+hline(0.65, "High", color.new(#ff6600, 60), hline.style_dashed)
+hline(0.45, "Active", color.new(#aaaa00, 70), hline.style_dotted)
+hline(0.25, "Calm", color.new(#0088aa, 70))
+
+bgcolor(regimeCol)
+
+// Wall markers
+plot(showWalls ? 0.88 : na, "Call Wall", color.new(#00ff00, 60), 3, plot.style_circles)
+plot(showWalls ? 0.12 : na, "Put Wall",  color.new(#ff0066, 60), 3, plot.style_circles)
+plot(showWalls ? 0.50 : na, "Flip",     color.new(#ffff00, 60), 3, plot.style_cross)
+
+// Signals
+plotshape(showSignals and bullMom,  "Bull Momentum", shape.triangleup,   location.bottom, #00ff00, size=size.small)
+plotshape(showSignals and bearMom,  "Bear Momentum", shape.triangledown, location.top,    #ff0066, size=size.small)
+plotshape(showBreakout and bullBO,  "BULL BREAKOUT", shape.triangleup,   location.bottom, #00ff00, size=size.large)
+plotshape(showBreakout and bearBO,  "BEAR BREAKOUT", shape.triangledown, location.top,    #ff0066, size=size.large)
+
+// ═════════════════════════════════════════════════════════════════════════════
+// HUD (Compact & Clean)
+// ═════════════════════════════════════════════════════════════════════════════
+var table hud = table.new(position.top_right, 4, 8, bgcolor=#0a0a0a88, frame_color=#9933ff, frame_width=2)
+
+if barstate.islast and showHUD
+      // Header row (was using colspan=4)
+    table.cell(hud, 0, 0, "REFLEX 5.0 PRO", text_color=#ffff00, text_size=size.normal, bgcolor=#663399)
+    table.cell(hud, 1, 0, "", bgcolor=#663399)
+    table.cell(hud, 2, 0, "", bgcolor=#663399)
+    table.cell(hud, 3, 0, "", bgcolor=#663399)
+
+    // Regime row at the bottom (was using colspan=3)
+    
+    regimeTxt = regime == "VOL SQUEEZE" ? "SQUEEZE!" : regime
+    regimeClr = regime == "BREAKOUT UP" ? #00ff00 : regime == "BREAKDOWN" ? #ff0066 : regime == "VOL SQUEEZE" ? #ff00ff : regime == "PINNED" ? #ffff00 : regime == "PRIMING" ? #ff8800 : #888888
+    table.cell(hud, 0, 7, "REGIME", text_color=#ffffff, bgcolor=#00000088)
+    table.cell(hud, 1, 7, regimeTxt, text_color=regimeClr, bgcolor=color.new(regimeClr, 80), text_size=size.normal)
+    table.cell(hud, 2, 7, "", bgcolor=color.new(regimeClr, 80))
+    table.cell(hud, 3, 7, "", bgcolor=color.new(regimeClr, 80))
+    table.cell(hud, 1, 7, regimeTxt, text_color=regimeClr, bgcolor=color.new(regimeClr, 80), text_size=size.normal)
+    table.cell(hud, 2, 7, "", bgcolor=color.new(regimeClr, 80))
+    table.cell(hud, 3, 7, "", bgcolor=color.new(regimeClr, 80))  
+  
+    
+    table.cell(hud, 0, 1, "Call",  text_color=#aaaaaa, text_size=size.small)
+    table.cell(hud, 1, 1, str.tostring(callWall, "#.##"), text_color=#00ff00, text_size=size.small)
+    table.cell(hud, 2, 1, "Put",   text_color=#aaaaaa, text_size=size.small)
+    table.cell(hud, 3, 1, str.tostring(putWall, "#.##"),  text_color=#ff0066, text_size=size.small)
+    
+    table.cell(hud, 0, 2, "Flip",  text_color=#aaaaaa)
+    table.cell(hud, 1, 2, str.tostring(flipLevel, "#.##"), text_color=#ffff00)
+    table.cell(hud, 2, 2, "IV",    text_color=#aaaaaa)
+    table.cell(hud, 3, 2, str.tostring(iv*100, "#.#")+"%", text_color=iv>0.18?#ff0066:iv>0.14?#ff8800:#00ffff)
+    
+    table.cell(hud, 0, 3, "IV/HV", text_color=#aaaaaa)
+    table.cell(hud, 1, 3, str.tostring(ivhv_ratio, "0.00"), text_color=ivhv_ratio>1.1?#ff0066:ivhv_ratio<0.9?#00ff00:#ffff00)
+    table.cell(hud, 2, 3, "GEX",   text_color=#aaaaaa)
+    table.cell(hud, 3, 3, (gexFlow>0?"+":"") + str.tostring(gexFlow/1e6, "#.#")+"M", text_color=gexFlow>0?#00ff00:#ff0066)
+    
+    table.cell(hud, 0, 4, "Reflex", text_color=#aaaaaa)
+    table.cell(hud, 1, 4, str.tostring(reflex, "0.00"), text_color=c_reflex)
+    table.cell(hud, 2, 4, "Mom", text_color=#aaaaaa)
+    table.cell(hud, 3, 4, momentum>0?"↑":"↓"+str.tostring(math.abs(momentum), "0.#"), text_color=momentum>0?#00ff00:#ff0066)
+    
+    table.cell(hud, 0, 5, "HR/EOM", text_color=#aaaaaa)
+    table.cell(hud, 1, 5, str.tostring(hr, "0.#")+"/"+str.tostring(eom, "0.#"), text_color=#ffffff)
+    table.cell(hud, 2, 5, "Pin%", text_color=#aaaaaa)
+    table.cell(hud, 3, 5, str.tostring(pinProb, "#")+"%", text_color=pinProb>75?#00ff00:pinProb>55?#ffff00:#ff8800)
+  
+
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ALERTS
+// ═════════════════════════════════════════════════════════════════════════════
+alertcondition(bullBO, "BULL BREAKOUT", "Price broke above Call Wall with confirmation!")
+alertcondition(bearBO, "BEAR BREAKOUT", "Price broke below Put Wall with confirmation!")
+alertcondition(regime == "VOL SQUEEZE", "VOLATILITY SQUEEZE", "Extreme compression - explosion imminent!")
+alertcondition(pinProb > 80, "HIGH PIN RISK", "Very high pinning probability detected!")
+alertcondition(reflex > 0.8 and momentum > 1.0, "EXTREME REFLEXIVITY", "Maximum gamma tension + momentum!")

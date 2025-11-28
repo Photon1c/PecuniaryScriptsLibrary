@@ -1,0 +1,208 @@
+//@version=5
+// ───────────────────────────────────────────────────────────────────────────────
+// REFLEXIVITY 6.0 • SCALED GAMMA INDEX
+// ───────────────────────────────────────────────────────────────────────────────
+// Purpose: Advanced reflexivity index with scaled dynamic levels in sub-pane
+// Type: Sub-pane indicator (separate chart below price)
+// Key Features:
+//   - Dynamic IV sourcing (VIX or ATR proxy with fallback)
+//   - VWAP-based gamma flip calculation with wall bands
+//   - Scaled CW/PW/Flip levels displayed in sub-pane (0-10 range)
+//   - Core Reflexivity Index (0-4 scale) with HR/EOM components
+//   - Regime detection: Gamma Beam, Containment, Drain Tilt, Dry Bay, Risk (Rinse), Calm Bay
+//   - Garage HUD table with all key metrics
+//   - Index max value configurable for Y-axis scaling
+// Use Case: Comprehensive reflexivity analysis with diagnostic scaled level visualization
+// ───────────────────────────────────────────────────────────────────────────────
+indicator("Reflexivity 6.0 • Scaled Gamma Index", overlay=false, max_lines_count=500, max_labels_count=500)
+
+// -------------------------------------------------------------------------------
+// I. Inputs: Dynamic Level & Volatility Sourcing
+// -------------------------------------------------------------------------------
+ivSourceSymbol  = input.symbol("VIX", "IV Index Symbol (e.g., VIX, VXN)", group="Dynamic Sourcing")
+vwapLen         = input.int(100, "VWAP Length (Flip Base)", minval=50, group="Dynamic Sourcing")
+bandMultiplier  = input.float(1.5, "Wall Band Multiplier (σ)", minval=0.5, step=0.1, group="Dynamic Sourcing")
+
+hvLength        = input.int(131, "HV Length (bars)", minval=10)
+atrProxy        = input.bool(true,  "Use ATR% as IV acceleration proxy?")
+showHUD         = input.bool(true,  "Show Garage HUD Table")
+showVerbose     = input.bool(false,  "Show Verbose Label (Off-Chart)")
+showMarks       = input.bool(true,  "Show Reflexivity Signals on Chart")
+// Levels on Sub-Pane are now scaled for diagnostic purposes.
+showLevelsScaled= input.bool(true, "Plot Scaled CW/PW/Flip in Sub-Pane") 
+indexMax        = input.float(4.0, "Index Max Value (Y-Axis Top)", minval=2.0, step=0.5)
+
+alphaBias       = input.float(0.30, "α Bias (Call Deck Tilt)", minval=0, step=0.05, group="Model Biases & Weights")
+betaBias        = input.float(0.50, "β Bias (Tension Tilt)",   minval=0, step=0.05, group="Model Biases & Weights")
+wTension        = input.float(0.65, "Tension Weight",          minval=0, maxval=1, step=0.05, group="Model Biases & Weights")
+kAccel          = input.float(0.50, "κ (IV Acceleration Gain)",minval=0, step=0.05, group="Model Biases & Weights")
+emaAccelLen     = input.int(3,      "IV accel EMA", minval=1, group="Model Biases & Weights")
+emaScoreLen     = input.int(3,      "Score EMA",    minval=1, group="Model Biases & Weights")
+
+// -------------------------------------------------------------------------------
+// II. Helpers & Dynamic Data Sourcing
+// -------------------------------------------------------------------------------
+clamp01(x) => math.max(0.0, math.min(1.0, x))
+garageMedian(a, b, c) => a < b ? (b < c ? b : (a < c ? c : a)) : (a < c ? a : (b < c ? c : b))
+vwap(length) => ta.vwap(close, length)
+
+// IV Function (Robust Fallback logic from v9.1)
+getIV(symbol) =>
+    ivValue = request.security(symbol, timeframe.period, close)
+    iv_base = nz(ivValue, ivValue[1]) / 100.0
+    atr_pct_annualized = ta.atr(14) / close * math.sqrt(252.0)
+    final_iv = na(iv_base) or iv_base == 0 or iv_base < 0.001 ? atr_pct_annualized : iv_base
+    math.max(final_iv, 0.005) 
+
+// **NEW:** Function to scale a large price level down to the 0 to 10 range based on the chart's current volatility
+scaleTo10(level, basePrice) =>
+    // Determine the current "standard deviation" of movement for scaling (e.g., 2 ATR)
+    scaleFactor = 2 * ta.atr(100) 
+    // Normalize the level's distance from the base price (Spot)
+    normalized = (level - basePrice) / math.max(scaleFactor, 1e-6)
+    // Shift and scale the result to fit within the 0-10 index range.
+    // We target a center value (e.g., 2.0) for the flip level when normalized is 0.
+    scaled = normalized + 2.0 // Adjust 2.0 as necessary to center the scaled levels 
+    scaled
+
+// -------------------------------------------------------------------------------
+// III. Core Calculation (Unchanged from v9.1, ensures non-flat data)
+// -------------------------------------------------------------------------------
+spot = close
+iv = getIV(ivSourceSymbol)
+
+ret = math.log(spot / nz(spot[1], spot))
+hvUsed = ta.stdev(ret, hvLength) * math.sqrt(252.0)
+hvUsed := math.max(hvUsed, 0.005)
+
+flipBase = vwap(vwapLen)
+wallDistance = iv * bandMultiplier * ta.atr(14) 
+flip = flipBase
+cw = flipBase + wallDistance 
+pw = flipBase - wallDistance 
+
+// Garage ordering sanity, etc.
+pwEff   = math.min(pw, garageMedian(pw, flip, cw))
+cwEff   = math.max(cw, garageMedian(pw, flip, cw))
+flipEff = clamp01((flip - pwEff) / math.max(math.abs(cwEff - pwEff), 1e-6)) * (cwEff - pwEff) + pwEff
+
+priceRange = math.max(0.1, math.abs(cwEff - pwEff))
+wallBias = clamp01((spot - cwEff) / priceRange)
+
+gpdRaw  = (spot - flipEff) / math.max(math.abs(spot), 1e-6)
+gpd     = math.abs(gpdRaw)
+gpdAdj  = gpd * (1 + alphaBias * wallBias)
+tension     = clamp01(math.abs(spot - flipEff) / priceRange)
+tensionAdj  = tension * (1 + betaBias * wallBias)
+momBase = nz(iv / math.max(hvUsed, 1e-6), 1.0)
+atrPct  = ta.atr(14) / math.max(spot, 1e-6)
+ivDelta = atrProxy ? ta.change(atrPct) : ta.change(iv)
+ivAccel = ta.ema(ivDelta, emaAccelLen)
+momAdj  = momBase + kAccel * ivAccel
+coreRaw = gpdAdj * (wTension * tensionAdj + (1 - wTension)) * momAdj
+reflex  = ta.ema(coreRaw, emaScoreLen)
+
+// HR/EOM
+ivMin = 0.08
+ivMax = 0.30
+ivNorm = clamp01((iv - ivMin) / math.max(ivMax - ivMin, 1e-6))
+center = (pwEff + cwEff) / 2.0
+distToCenter = math.abs(spot - center) / (priceRange / 2.0)
+proximity    = 1.0 - clamp01(distToCenter)
+hrRaw = (1.0 - proximity) * ivNorm
+hr    = clamp01(hrRaw)
+directionalBias = clamp01((spot - flipEff) / priceRange)
+eomRaw = proximity * ivNorm * directionalBias
+eom    = clamp01(eomRaw)
+
+regimeCode = spot <= pwEff                  ? "Drain Tilt" :
+             spot >= cwEff                  ? "Dry Bay" :
+             math.abs(spot - flipEff) <= priceRange * 0.05 ? "Gamma Beam" :
+             reflex >= 1.20                 ? "Risk (Rinse)" :
+             reflex <= 0.90                 ? "Calm Bay" :
+             "Containment"
+
+// -------------------------------------------------------------------------------
+// IV. Index Plots (Overlay=false)
+// -------------------------------------------------------------------------------
+
+// Plot the core Index values (Reflex, HR, EOM)
+colorReflex = reflex >= 1.20 ? color.new(color.red, 0) : reflex >= 1.00 ? color.new(color.orange, 0) : color.new(color.teal, 0)
+plot(reflex, "Reflexivity Index", color=colorReflex, linewidth=2)
+plot(hr * indexMax / 2.0,  "Hedging Resistance", color=color.new(color.red,   40)) // Scale HR/EOM to fit max 4
+plot(eom * indexMax / 2.0, "Ease of Motion",      color=color.new(color.green, 40))
+
+// Plot horizontal trigger levels
+hline(1.20, "Risk Threshold (1.2)", color=color.new(color.red, 60))
+hline(1.00, "Neutral (1.0)",      color=color.new(color.gray,60))
+hline(0.90, "Calm Threshold (0.9)",   color=color.new(color.teal,60))
+// H-lines for HR/EOM triggers (Now scaled)
+hline(0.40 * indexMax / 2.0, "EOM Long Trigger", color=color.new(color.green, 90), linestyle=hline.style_dashed)
+hline(0.50 * indexMax / 2.0, "HR Short Trigger", color=color.new(color.red, 90), linestyle=hline.style_dashed)
+
+// Plot the SCALED dynamic levels on the sub-pane
+cwScaled = scaleTo10(cwEff, spot)
+pwScaled = scaleTo10(pwEff, spot)
+flipScaled = scaleTo10(flipEff, spot)
+
+plot(showLevelsScaled ? cwScaled : na, "CW (Scaled)", color=color.new(color.orange, 50), linewidth=1, style=plot.style_line)
+plot(showLevelsScaled ? pwScaled : na, "PW (Scaled)", color=color.new(color.teal, 50), linewidth=1, style=plot.style_line)
+plot(showLevelsScaled ? flipScaled : na, "Flip (Scaled)", color=color.new(color.yellow, 50), linewidth=2, style=plot.style_line)
+
+
+// V. Regime Shading (Will shade the index sub-pane background)
+var color colorChop = color.new(color.gray, 80)
+var color colorTrendDown = color.new(color.red, 80)
+var color colorTrendUp = color.new(color.blue, 80)
+var color colorRisk = color.new(color.red, 65)
+var color colorCalm = color.new(color.teal, 80)
+
+regimeColor = switch regimeCode
+    "Gamma Beam"    => colorChop
+    "Containment"   => colorChop
+    "Drain Tilt"    => colorTrendDown
+    "Dry Bay"       => colorTrendUp
+    "Risk (Rinse)"  => colorRisk
+    "Calm Bay"      => colorCalm
+    => color.new(color.black, 100)
+
+bgcolor(regimeColor, transp=80) 
+
+// VI. HUD and Verbose Label (Plotting logic restored)
+// ... (HUD and Verbose Label logic remains the same) ...
+var table hud = table.new(position.top_right, 2, 9)
+if barstate.islast and showHUD
+    table.cell(hud, 0, 0, "Garage Regime", text_color=color.white)
+    table.cell(hud, 1, 0, regimeCode, text_color=regimeColor)
+    // Levels in HUD are the actual, unscaled prices
+    table.cell(hud, 0, 1, "Call Wall", text_color=color.orange)
+    table.cell(hud, 1, 1, str.tostring(cwEff, "#.##"))
+    table.cell(hud, 0, 2, "Put Wall", text_color=color.teal)
+    table.cell(hud, 1, 2, str.tostring(pwEff, "#.##"))
+    table.cell(hud, 0, 3, "Gamma Flip", text_color=color.yellow)
+    table.cell(hud, 1, 3, str.tostring(flipEff, "#.##"))
+
+    table.cell(hud, 0, 4, "IV/HV", text_color=color.white)
+    table.cell(hud, 1, 4, str.tostring(iv * 100, "#.##") + "% / " + str.tostring(hvUsed * 100, "#.##") + "%")
+
+    table.cell(hud, 0, 5, "Reflex", text_color=color.white)
+    table.cell(hud, 1, 5, str.tostring(reflex, "#.##"))
+    table.cell(hud, 0, 6, "HR/EOM", text_color=color.white)
+    table.cell(hud, 1, 6, str.tostring(hr, "#.##") + " / " + str.tostring(eom, "#.##"))
+
+    table.cell(hud, 0, 7, "GPD(adj)", text_color=color.white)
+    table.cell(hud, 1, 7, str.tostring(gpdAdj, "#.###"))
+    table.cell(hud, 0, 8, "Wall Bias", text_color=color.white)
+    table.cell(hud, 1, 8, str.tostring(wallBias * 100, "#.0") + "%")
+
+var label verboseLabel = na
+if barstate.islast and showVerbose
+    label.delete(verboseLabel)
+    txt = "Reflexivity Index 10.0 (Scaled)\n"
+    txt += "Reflex: " + str.tostring(reflex, format.mintick) + "\n"
+    txt += "IV/HV: " + str.tostring(iv * 100, "#.00") + "% / " + str.tostring(hvUsed * 100, "#.00") + "%\n"
+    txt += "GPD(adj): " + str.tostring(gpdAdj, format.mintick) + " | Tension(adj): " + str.tostring(tensionAdj, format.mintick) + "\n"
+    txt += "Momentum(adj): " + str.tostring(momAdj, format.mintick) + "\n"
+    txt += "HR: " + str.tostring(hr, "#.00") + " | EOM: " + str.tostring(eom, "#.00") + "\n"
+    txt += "Regime: " + regimeCode
+    verboseLabel := label.new(bar_index, reflex, txt, style=label.style_label_left, color=color.new(colorReflex, 70), textcolor=color.white, size=size.small)

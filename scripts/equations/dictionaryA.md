@@ -14,12 +14,12 @@ E_{\text{IV}} = \int_{t-W}^{t} \left( \frac{d\sigma_{\text{imp}}}{du} \right)^2 
 
 **Plug 3: Spectral band energy**
 ```math
-E_{\text{band}} = \int_{f_1}^{f_2} \text{PSD}(f) \, df$$
+E_{\text{band}} = \int_{f_1}^{f_2} \text{PSD}(f) \, df
 ```
 
 **Plug 4: Hazard accumulation**
 ```math
 \Lambda(t) = \int_{t-W}^{t} \lambda(u) \, du,
 \qquad
-p(t) = 1 - e^{-\Lambda(t)}$$
+p(t) = 1 - e^{-\Lambda(t)}
 ```

@@ -96,6 +96,7 @@ flowchart TB
 > **Rule of thumb:** Fade IV only when *both* Rank and Percentile are high and IV slope is not rising; deploy convexity when volatility is cheap or just beginning to reprice near structural levels, *and* structure supports it.
 
 # Color Coded Diagram (Updated 12.19.2025)  
+**Bias Paths Highlighted** (blue = convexity, green = fade, orange = defensive, gray = neutral)
 
 ```mermaid
 flowchart TB

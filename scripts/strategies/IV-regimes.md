@@ -2,6 +2,8 @@
 
 This page outlines a systematic framework for options trading based on implied volatility (IV) regimes, combining IV Rank, Percentile, Slope, and price structure to determine strategic bias (fade vs convexity vs neutral/defensive).  
 
+[Here is a working script that uses reflexive bifurcation](reflexive-bifurcation.py) to implement an IV driven conditional momentum strategy.
+
 # IV Regime Quadrant Overview 
 ```mermaid
 flowchart TB
@@ -91,7 +93,48 @@ flowchart TB
 | **High** | **Low** | One-off volatility spike (possible repricing / regime shift) | **Defensive / wait** — fading is dangerous |
 | **Low** | **High** | Persistent low-volatility environment (stable carry regime) | **Neutral / selective** — convexity delayed |
 
-> **First Rule of thumb:** Fade IV only when *both* Rank and Percentile are high and IV slope is not rising; deploy convexity when volatility is cheap or just beginning to reprice near structural levels, *and* structure supports it.  
-> **Second Rule of thumb:** Persistent low-volatility environment" → add "(carry regime)
+> **Rule of thumb:** Fade IV only when *both* Rank and Percentile are high and IV slope is not rising; deploy convexity when volatility is cheap or just beginning to reprice near structural levels, *and* structure supports it.
+
+# Color Coded Diagram (Updated 12.19.2025)  
+
+```mermaid
+flowchart TB
+  A[Inputs] --> B["IV Rank\n0–100\n\"How cheap vs its range?\""]
+  A --> C["IV Percentile\n0–100\n\"How often this high?\""]
+  A --> D["IV Slope\nΔIV / time\n\"Is vol rising now?\""]
+  A --> E["Structure\nSpot vs Flip/Walls\n\"Where are we on the map?\""]
+  
+  B --> F{"Vol Context\n(Rank × Percentile)"}
+  C --> F
+  
+  F -->|"Low Rank + Low Percentile"| G["Vol is CHEAP & RARELY this low\n→ Complacency risk"]:::cheap
+  F -->|"High Rank + High Percentile"| H["Vol is RICH & OFTEN this high\n→ Mean-reversion likely"]:::rich
+  F -->|"High Rank + Low Percentile"| I["One-off SPIKE\n→ Repricing risk"]:::spike
+  F -->|"Low Rank + High Percentile"| J["Persistent LOW-VOL regime\n→ Carry dominates"]:::persist
+  
+  D --> K{"Slope Gate"}
+  K -->|"Slope ↑ (positive)"| L["Vol is being BID now\n→ Avoid fading"]
+  K -->|"Slope ↓/flat"| M["Vol stable/bleeding\n→ Fade more plausible"]
+  
+  G --> N[Convexity Bias]:::cheap
+  H --> O[Fade Bias]:::rich
+  I --> P[Defensive / Wait]:::spike
+  J --> Q[Neutral / Selective]:::persist
+  
+  N --> R{Structure Gate}
+  O --> R
+  P --> R
+  Q --> R
+  
+  R -->|"Near Flip/Walls + Break risk"| S["Deploy convexity\n(defined-risk longs, spreads, straddles if justified)"]:::cheap
+  R -->|"Inside pin zone / stable"| T["Fade IV\n(defined-risk short vol: spreads/condors/covered writes)"]:::rich
+  R -->|"Unclear / conflicting"| U["Abstain / Neutral\n(wait for confirmation)"]:::persist
+
+  %% Color definitions (matching your quadrant diagram)
+  classDef rich fill:#1f7a1f,color:#ffffff,stroke:#0b3d0b,stroke-width:2px;
+  classDef cheap fill:#1f4aa8,color:#ffffff,stroke:#0b1f4a,stroke-width:2px;
+  classDef spike fill:#a85a1f,color:#ffffff,stroke:#4a260b,stroke-width:2px;
+  classDef persist fill:#6b6b6b,color:#ffffff,stroke:#2b2b2b,stroke-width:2px;
+```
 
 

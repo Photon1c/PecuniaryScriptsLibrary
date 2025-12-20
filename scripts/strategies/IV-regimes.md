@@ -1,4 +1,8 @@
 ## IV Regime Trading Strategy
+
+This page outlines a systematic framework for options trading based on implied volatility (IV) regimes, combining IV Rank, Percentile, Slope, and price structure to determine strategic bias (fade vs convexity vs neutral/defensive).  
+
+# IV Regime Quadrant Overview 
 ```mermaid
 flowchart TB
   %% IV Rank (vertical) + IV Percentile (horizontal) quadrant
@@ -41,7 +45,8 @@ Fade IV (short vol) = bet on mean reversion / vol coming down.
 
 Deploy convexity (long vol) = bet on regime change / acceleration.
 
-Mermaid overview diagram
+# Mermaid overview diagram
+## Full Decision Flowchart
 
 ```mermaid
 flowchart TB
@@ -86,7 +91,7 @@ flowchart TB
 | **High** | **Low** | One-off volatility spike (possible repricing / regime shift) | **Defensive / wait** — fading is dangerous |
 | **Low** | **High** | Persistent low-volatility environment (stable carry regime) | **Neutral / selective** — convexity delayed |
 
-> **Rule of thumb:** Fade IV only when *both* Rank and Percentile are high and IV slope is not rising; deploy convexity when volatility is cheap or just beginning to reprice near structural levels.
-
+> **First Rule of thumb:** Fade IV only when *both* Rank and Percentile are high and IV slope is not rising; deploy convexity when volatility is cheap or just beginning to reprice near structural levels, *and* structure supports it.  
+> **Second Rule of thumb:** Persistent low-volatility environment" → add "(carry regime)
 
 

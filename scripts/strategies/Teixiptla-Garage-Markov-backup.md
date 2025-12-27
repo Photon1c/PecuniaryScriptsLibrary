@@ -97,10 +97,10 @@ Different ceremonies demand different skins:
 - Transfer: buy convex skin (debit spreads, long options)  
 - Pre-transfer: probes, calendars, tight spreads  
 
-This is your “structure” axis.
+This is the “structure” axis.
 
 **Step 3 — Measure mispricing (cheap ask / expensive bid)**  
-This is the heart of your “profitable anatomy.”  
+This is the heart of the “profitable anatomy.”  
 
 A trade is “cheap entry ask” when at least one is true:  
 - IV is low vs realized / expected future variance  
@@ -122,6 +122,7 @@ Kelly should be computed conditional on the ceremony label:
 - If regime is uncertain: Kelly forces “PROBE” sizing.  
 
 So Kelly isn’t one number. It’s:  
+
 **Kelly(structure | regime | surface)**  
 
 This is how it remains “within Teixiptla” rather than stapled onto it.
@@ -159,8 +160,6 @@ To keep this from getting tangled again, adopt this anatomy table:
 **E) Transfer Rules (exit)**  
 - where and why to transfer skin back  
 
-That’s the organization.
-
 ---
 
 **One Tight Story Example (so it “clicks”)**  
@@ -185,7 +184,4 @@ That’s the organization.
 
 Teixiptla tells you what ritual is happening; Kelly tells you how much blood to spill.
 
-If you want, next we can do one of these (your pick):  
-1. A compact Teixiptla “trade anatomy” diagram (Mermaid) that shows where Kelly attaches  
-2. A precise definition of cheap ask / expensive bid in terms of IV, skew, term, and spreads  
-3. A small “regime → allowed structures → Kelly multiplier” table (your first implementation spec)
+

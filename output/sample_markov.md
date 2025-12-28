@@ -1,4 +1,4 @@
-### Sample output for working Markov Mask (release in 2026)
+### Sample output for working Markov Mask engine (release in 2026)
 
 # Analysis Summary
 

@@ -1,0 +1,128 @@
+{
+  "SPY": {
+    "ticker": "SPY",
+    "as_of_stock_date": "2026-01-14 00:00:00",
+    "as_of_chain_date": "01_13_2026",
+    "spot": 690.36,
+    "flip": 694.5,
+    "iv": 23.375,
+    "hv20": 8.316158593326538,
+    "atr14_close_to_close": 2.394285714285705,
+    "structural_airspeed": 1.7291169443852148,
+    "load_factor": 2.81079295625109,
+    "expected_move": {
+      "5d": 8.086919402959982,
+      "10d": 11.43663109748414,
+      "20d": 16.173838805919964
+    },
+    "envelope": {
+      "hv_band_10d": [
+        678.9233689025159,
+        701.7966310974841
+      ],
+      "atr_band_1x": [
+        687.9657142857143,
+        692.7542857142857
+      ],
+      "atr_band_2x": [
+        685.5714285714286,
+        695.1485714285715
+      ]
+    },
+    "walls": {
+      "put_wall": 680.0,
+      "call_wall": 700.0,
+      "band_pct_used": 0.03,
+      "method": "max_OI_within_dynamic_band"
+    },
+    "wall_distances_atr": {
+      "x_call_wall_atr": 4.0262529816119565,
+      "x_put_wall_atr": 4.3269689719398325,
+      "x_nearest_wall_atr": 4.0262529816119565
+    }
+  },
+  "DIA": {
+    "ticker": "DIA",
+    "as_of_stock_date": "2026-01-14 00:00:00",
+    "as_of_chain_date": "01_14_2026",
+    "spot": 491.58,
+    "flip": 491.5,
+    "iv": 13.208333333333332,
+    "hv20": 9.592554350148792,
+    "atr14_close_to_close": 2.7292857142857128,
+    "structural_airspeed": 0.029311698497498404,
+    "load_factor": 1.3769359911681418,
+    "expected_move": {
+      "5d": 6.642219228963167,
+      "10d": 9.393516517855074,
+      "20d": 13.284438457926335
+    },
+    "envelope": {
+      "hv_band_10d": [
+        482.1864834821449,
+        500.97351651785505
+      ],
+      "atr_band_1x": [
+        488.8507142857143,
+        494.3092857142857
+      ],
+      "atr_band_2x": [
+        486.12142857142857,
+        497.0385714285714
+      ]
+    },
+    "walls": {
+      "put_wall": 480.0,
+      "call_wall": 490.0,
+      "band_pct_used": 0.03,
+      "method": "max_OI_within_dynamic_band"
+    },
+    "wall_distances_atr": {
+      "x_call_wall_atr": 0.5789060453257028,
+      "x_put_wall_atr": 4.242868357513732,
+      "x_nearest_wall_atr": 0.5789060453257028
+    }
+  },
+  "QQQ": {
+    "ticker": "QQQ",
+    "as_of_stock_date": "2026-01-14 00:00:00",
+    "as_of_chain_date": "01_14_2026",
+    "spot": 619.55,
+    "flip": 624.5,
+    "iv": 17.376666666666665,
+    "hv20": 12.871766830133916,
+    "atr14_close_to_close": 2.957142857142839,
+    "structural_airspeed": 1.6739130429122289,
+    "load_factor": 1.3499830205622128,
+    "expected_move": {
+      "5d": 11.233090481063,
+      "10d": 15.88598890568341,
+      "20d": 22.466180962126
+    },
+    "envelope": {
+      "hv_band_10d": [
+        603.6640110943165,
+        635.4359889056834
+      ],
+      "atr_band_1x": [
+        616.5928571428572,
+        622.5071428571428
+      ],
+      "atr_band_2x": [
+        613.6357142857142,
+        625.4642857142857
+      ]
+    },
+    "walls": {
+      "put_wall": 610.0,
+      "call_wall": 627.0,
+      "band_pct_used": 0.03,
+      "method": "max_OI_within_dynamic_band"
+    },
+    "wall_distances_atr": {
+      "x_call_wall_atr": 2.51932367064567,
+      "x_put_wall_atr": 3.2294685979417297,
+      "x_nearest_wall_atr": 2.51932367064567
+    }
+  }
+}

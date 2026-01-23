@@ -30,6 +30,9 @@ New module containing the `MarkovMaskComputer` class with methods:
    - Mask state distribution table
    - Teixiptla interpretation text
 
+### Universal Mode
+In universal mode (`--universal`), Markov Masks are computed for each ticker and included in the ticker reports saved to `output/markov/{TICKER}/`.
+
 ## Output Files
 
 ### `markov_masks.csv`

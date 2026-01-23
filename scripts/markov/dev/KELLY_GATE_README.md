@@ -3,10 +3,14 @@
 ## Overview
 
 The Kelly Gate module has been integrated into `testB.py` as a permission layer for option trading. It provides:
-- **Regime inference**: PIN / PRE_TRANSFER / TRANSFER
-- **Structure family recommendation**: MEAN_REVERSION_PREMIUM / CONVEXITY / PROBE_ONLY
+- **Regime inference**: PIN / EXPRESSIVE / RUPTURE_CANDIDATE
+- **Structure family recommendation**: PROBE_ONLY / NORMAL / EXPLOIT
 - **Kelly sizing**: Fractional Kelly with multipliers based on market structure
-- **Gate state**: BLOCK / PROBE / DEPLOY
+- **Gate state**: BLOCK / OPEN / PARTIAL
+
+**Note:** This module works in conjunction with:
+- **State Machine** (`state_machine.py`): Maps Kelly Gate signals to explicit market states
+- **Reflexive Bifurcation Sleeve** (`reflexive_bifurcation.py`): Generates nested leg plans when permitted
 
 ## New Features
 
@@ -43,6 +47,11 @@ python testB.py --ticker SPY
 ### With Debug Output
 ```powershell
 python testB.py --ticker SPY --debug
+```
+
+### Universal Mode (Batch Processing)
+```powershell
+python testB.py --universal
 ```
 
 ### Use Raw Premium (disable log transformation)

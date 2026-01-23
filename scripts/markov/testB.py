@@ -86,6 +86,7 @@ import warnings
 import json
 import os
 import sys
+from typing import List
 warnings.filterwarnings('ignore')
 
 # Fix for Windows multiprocessing issues with scipy/sklearn
@@ -112,9 +113,37 @@ except Exception as e:
 from data_loader import load_option_chain_data, get_latest_price, load_stock_data, get_most_recent_option_date
 from testA import MarkovBlanketAnalyzer
 from markov_mask import MarkovMaskComputer
+from reflexive_bifurcation import generate_reflexive_plan, LegPlan
+from state_machine import MarketState, MarketSignals, compute_market_state, describe_actions
 
 # Initialize rich console
 console = Console()
+
+# Reflexive sleeve configuration (can be wired to CLI later)
+REFLEXIVE_EXP_CAP_FRAC = 0.20   # at most 20% of K to this sleeve
+REFLEXIVE_STOP_FRAC    = 0.097  # per-leg stop
+REFLEXIVE_DTE_INITIAL  = 2.0    # days
+REFLEXIVE_MAX_LEGS     = 2      # nested legs to pre-plan
+REFLEXIVE_INITIAL_DIR  = "call" # default; can be inferred later
+
+# Default capital (can be overridden via CLI)
+DEFAULT_CAPITAL = 10000.0
+
+# Path to tickers.json
+SCRIPT_DIR = Path(__file__).parent
+TICKERS_JSON = SCRIPT_DIR.parent.parent / "tickers.json"
+
+
+def load_tickers() -> List[str]:
+    """Load ticker symbols from shared tickers.json file."""
+    if not TICKERS_JSON.exists():
+        raise FileNotFoundError(f"Tickers file not found: {TICKERS_JSON}")
+    
+    with open(TICKERS_JSON, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    
+    # Extract just the ticker symbols (first element of each [symbol, type] pair)
+    return [ticker[0] for ticker in data["tickers"]]
 
 
 def setup_logging(output_dir: Path):
@@ -402,8 +431,8 @@ class OptionPricingPredictor:
         X_extra_call = X_extra_call[valid_call]
         y_call = y_call[valid_call]
 
-        if len(y_call) < 50:  # Need at least 50 samples for proper CV
-            console.print("[red]Insufficient call data for training (need at least 50 samples)[/red]")
+        if len(y_call) < 40:  # Need at least 40 samples for proper CV
+            console.print("[red]Insufficient call data for training (need at least 40 samples)[/red]")
             self.logger.warning(f"Insufficient data: {len(y_call)} samples")
             return None
 
@@ -848,11 +877,50 @@ class OptionPricingPredictor:
         # Combine valid IV and OTM filters
         valid_skew = valid_skew & otm_mask
         
+        # Check if we have any valid samples after filtering
+        if np.sum(valid_skew) == 0:
+            self.logger.warning("No valid samples found for skew analysis after filtering. Returning empty results.")
+            console.print("[yellow]Warning: No valid samples found for skew analysis. Skipping...[/yellow]")
+            # Return safe defaults that match the expected structure
+            feature_names_skew = ['σ', 'V', 'N', 'skew_lagged', 'σ×V', 'σ×N', 'V×N']
+            iv_skew_full = np.full(len(call_data['iv']), np.nan)
+            return {
+                'beta_sigma': 0.0,
+                'beta_V': 0.0,
+                'beta_N': 0.0,
+                'beta_interactions': np.zeros(4),  # 4 interaction terms
+                'r2': 0.0,
+                'iv_skew': iv_skew_full,
+                'iv_skew_valid': np.array([]),
+                'X_skew': np.array([]).reshape(0, 7),  # 7 features
+                'feature_names': feature_names_skew,
+                'relative_importance': np.zeros(7)
+            }
+        
         call_iv_valid = call_iv[valid_skew]
         put_iv_valid = put_iv[valid_skew]
         
         # Put-call IV skew: Put IV - Call IV (typical volatility skew metric)
         iv_skew = put_iv_valid - call_iv_valid
+        
+        # Check if iv_skew is empty (shouldn't happen after the check above, but safety check)
+        if len(iv_skew) == 0:
+            self.logger.warning("Computed iv_skew is empty. Returning empty results.")
+            console.print("[yellow]Warning: Computed IV skew is empty. Skipping analysis...[/yellow]")
+            feature_names_skew = ['σ', 'V', 'N', 'skew_lagged', 'σ×V', 'σ×N', 'V×N']
+            iv_skew_full = np.full(len(call_data['iv']), np.nan)
+            return {
+                'beta_sigma': 0.0,
+                'beta_V': 0.0,
+                'beta_N': 0.0,
+                'beta_interactions': np.zeros(4),
+                'r2': 0.0,
+                'iv_skew': iv_skew_full,
+                'iv_skew_valid': np.array([]),
+                'X_skew': np.array([]).reshape(0, 7),
+                'feature_names': feature_names_skew,
+                'relative_importance': np.zeros(7)
+            }
         
         # UPGRADED v5: Calculate lagged skew BEFORE outlier filtering
         # (so we can use it as a feature even if some values are filtered out)
@@ -1288,7 +1356,7 @@ class OptionPricingPredictor:
         ax7.set_title('SHAP Feature Importance')
 
         # 8. Skew attribution coefficients
-        if skew_results is not None:
+        if skew_results is not None and self.skew_model is not None:
             ax8 = fig.add_subplot(gs[2, 1])
             feature_names_skew = skew_results['feature_names']
             coefs = self.skew_model.coef_
@@ -1298,6 +1366,13 @@ class OptionPricingPredictor:
             ax8.set_xlabel('Coefficient')
             ax8.set_title('Skew Attribution Coefficients')
             ax8.grid(True, alpha=0.3, axis='x')
+        elif skew_results is not None:
+            # Handle case where skew_results exists but model wasn't trained (no valid data)
+            ax8 = fig.add_subplot(gs[2, 1])
+            ax8.text(0.5, 0.5, 'Skew model not available\n(insufficient data)', 
+                    ha='center', va='center', transform=ax8.transAxes, fontsize=10)
+            ax8.set_title('Skew Attribution Coefficients')
+            ax8.axis('off')
 
         # 9. IV Skew distribution
         if skew_results is not None:
@@ -1962,6 +2037,386 @@ class KellyGate:
             }
 
 
+def should_build_reflexive_sleeve(
+    kelly_gate_results: dict,
+    market_state: MarketState,
+    force: bool = False,
+) -> bool:
+    """
+    Determine if reflexive sleeve should be built based on market state.
+    
+    Args:
+        kelly_gate_results: Dictionary with 'kelly_fractional' key
+        market_state: Current market state from state machine
+        force: Override flag to force generation
+    
+    Returns:
+        True if reflexive sleeve should be built, False otherwise
+    """
+    if force:
+        return True
+    kelly_frac = kelly_gate_results.get('kelly_fractional', 0.0)
+    if kelly_frac <= 0.0:
+        return False
+    # Only allow in TREND / RUPTURE_PREP / RUPTURE_ACTIVE
+    if market_state in {MarketState.PIN, MarketState.RANGE, MarketState.COOLDOWN}:
+        return False
+    return market_state in {
+        MarketState.TREND,
+        MarketState.RUPTURE_PREP,
+        MarketState.RUPTURE_ACTIVE,
+    }
+
+
+def save_markdown_report(
+    ticker: str,
+    training_results: dict,
+    decomposition_results: dict,
+    skew_results: dict,
+    gate_results: dict,
+    market_state: MarketState,
+    signals: MarketSignals,
+    reflexive_plan: list[LegPlan],
+    capital_value: float,
+    output_dir: Path
+) -> Path:
+    """
+    Save a markdown report summarizing the analysis results.
+    
+    Returns:
+        Path to the saved markdown file
+    """
+    md_path = output_dir / f"{ticker}_report.md"
+    
+    improvement_pct = ((training_results['classical_cv_mae'].mean() - training_results['full_cv_mae'].mean()) / 
+                       training_results['classical_cv_mae'].mean() * 100) if training_results else 0.0
+    extra_pct = (np.mean(decomposition_results['extra']) / np.mean(decomposition_results['actual']) * 100) if decomposition_results else 0.0
+    residual_r2 = decomposition_results.get('residual_r2', 0.0) if decomposition_results else 0.0
+    
+    with open(md_path, 'w', encoding='utf-8') as f:
+        f.write(f"# {ticker} - Markov Blanket Option Pricing Analysis\n\n")
+        f.write(f"**Analysis Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+        
+        f.write("## Model Performance\n\n")
+        if training_results:
+            f.write(f"- **Baseline MAE:** ${training_results.get('baseline_mae', 0):.2f}\n")
+            f.write(f"- **Classical Model MAE:** ${training_results['classical_mae']:.2f}\n")
+            f.write(f"- **Combined Model MAE:** ${training_results['combined_mae']:.2f}\n")
+            f.write(f"- **Improvement:** {improvement_pct:.1f}% (CV MAE reduction)\n")
+            f.write(f"- **Extra Component (V, N):** {extra_pct:.1f}% of premium\n")
+            f.write(f"- **Extra Variance Explained (Residual R²):** {residual_r2:.3f} ({residual_r2*100:.1f}%)\n")
+            f.write(f"- **Skew Model R²:** {skew_results.get('r2', 0.0):.3f} ({skew_results.get('r2', 0.0)*100:.1f}%)\n\n")
+        else:
+            f.write("- *Insufficient data for model training*\n\n")
+        
+        f.write("## Kelly Gate\n\n")
+        f.write(f"- **Regime:** {gate_results.get('regime', 'N/A')}\n")
+        f.write(f"- **Structure:** {gate_results.get('structure_family', 'N/A')}\n")
+        f.write(f"- **Kelly (raw):** {gate_results.get('kelly_raw', 0.0):.4f}\n")
+        f.write(f"- **Kelly (fractional):** {gate_results.get('kelly_fractional', 0.0):.4f}\n")
+        f.write(f"- **Kelly (adjusted):** {gate_results.get('kelly_adjusted', 0.0):.4f}\n")
+        f.write(f"- **Gate State:** {gate_results.get('gate_state', 'N/A')}\n")
+        f.write(f"- **p:** {gate_results.get('p', 0.0):.3f}\n")
+        f.write(f"- **b:** {gate_results.get('b', 0.0):.3f}\n")
+        f.write(f"- **Multiplier:** {gate_results.get('multiplier', 0.0):.3f}\n\n")
+        
+        f.write("## State Machine\n\n")
+        f.write(f"- **Current State:** {market_state.value}\n")
+        f.write(f"- **Actions:** {describe_actions(market_state)}\n")
+        f.write(f"- **Derived from:** regime={signals.regime}, gate={signals.gate_state}, Kelly={signals.kelly_fraction:.4f}\n\n")
+        
+        f.write("## Reflexive Sleeve\n\n")
+        if not reflexive_plan:
+            f.write("**Status:** BLOCKED\n\n")
+            f.write("Kelly Gate or Teixiptla regime does not permit reflexive nesting.\n\n")
+        else:
+            E0 = REFLEXIVE_EXP_CAP_FRAC * capital_value
+            E0_eff = min(E0, gate_results.get('kelly_fractional', 0.0) * capital_value)
+            f.write(f"- **Max Sleeve Cap:** {REFLEXIVE_EXP_CAP_FRAC:.0%} of K (K=${capital_value:.2f})\n")
+            f.write(f"- **Effective Sleeve:** ${E0_eff:.2f}\n\n")
+            f.write("| Leg | Direction | DTE (days) | Sleeve Entry | Stop Loss |\n")
+            f.write("|-----|-----------|------------|--------------|-----------|\n")
+            for lp in reflexive_plan:
+                f.write(f"| {lp.leg} | {lp.direction.upper()} | {lp.dte:.1f} | ${lp.sleeve_entry:.2f} | ${lp.stop_loss:.2f} |\n")
+            f.write("\n")
+        
+        if gate_results.get('skew_features'):
+            f.write("## Skew Features\n\n")
+            f.write(f"- **Put-Call IV Diff:** {gate_results['skew_features'].get('put_call_iv_diff', 0.0):.4f}\n")
+            f.write(f"- **Skew Slope (Puts):** {gate_results['skew_features'].get('skew_slope_puts', 0.0):.4f}\n")
+            f.write(f"- **Smile Curvature:** {gate_results['skew_features'].get('smile_curvature', 0.0):.4f}\n\n")
+        
+        if gate_results.get('term_features'):
+            f.write("## Term Structure\n\n")
+            f.write(f"- **Front IV:** {gate_results['term_features'].get('front_iv', 0.0):.4f}\n")
+            f.write(f"- **Back IV:** {gate_results['term_features'].get('back_iv', 0.0):.4f}\n")
+            f.write(f"- **Term Slope:** {gate_results['term_features'].get('term_slope', 0.0):.6f}\n")
+            f.write(f"- **Inverted:** {gate_results['term_features'].get('is_inverted', False)}\n\n")
+        
+        if gate_results.get('execution_quality'):
+            f.write("## Execution Quality\n\n")
+            f.write(f"- **Bid-Ask Spread:** {gate_results['execution_quality'].get('bid_ask_spread_pct', 0.0):.2f}%\n")
+            f.write(f"- **Quality Score:** {gate_results['execution_quality'].get('quality_score', 0.0):.3f}\n\n")
+    
+    return md_path
+
+
+def save_csv_report(
+    ticker: str,
+    training_results: dict,
+    decomposition_results: dict,
+    skew_results: dict,
+    gate_results: dict,
+    market_state: MarketState,
+    signals: MarketSignals,
+    reflexive_plan: list[LegPlan],
+    capital_value: float,
+    output_dir: Path
+) -> Path:
+    """
+    Save a CSV report with key metrics.
+    
+    Returns:
+        Path to the saved CSV file
+    """
+    csv_path = output_dir / f"{ticker}_report.csv"
+    
+    # Prepare data for CSV
+    data = {
+        'Ticker': [ticker],
+        'Analysis_Date': [datetime.now().strftime('%Y-%m-%d %H:%M:%S')],
+        'Baseline_MAE': [training_results.get('baseline_mae', 0.0) if training_results else 0.0],
+        'Classical_MAE': [training_results.get('classical_mae', 0.0) if training_results else 0.0],
+        'Combined_MAE': [training_results.get('combined_mae', 0.0) if training_results else 0.0],
+        'Improvement_Pct': [((training_results['classical_cv_mae'].mean() - training_results['full_cv_mae'].mean()) / 
+                            training_results['classical_cv_mae'].mean() * 100) if training_results else 0.0],
+        'Extra_Component_Pct': [(np.mean(decomposition_results['extra']) / np.mean(decomposition_results['actual']) * 100) 
+                                if decomposition_results else 0.0],
+        'Residual_R2': [decomposition_results.get('residual_r2', 0.0) if decomposition_results else 0.0],
+        'Skew_R2': [skew_results.get('r2', 0.0) if skew_results else 0.0],
+        'Regime': [gate_results.get('regime', 'N/A')],
+        'Structure_Family': [gate_results.get('structure_family', 'N/A')],
+        'Kelly_Raw': [gate_results.get('kelly_raw', 0.0)],
+        'Kelly_Fractional': [gate_results.get('kelly_fractional', 0.0)],
+        'Kelly_Adjusted': [gate_results.get('kelly_adjusted', 0.0)],
+        'Gate_State': [gate_results.get('gate_state', 'N/A')],
+        'P': [gate_results.get('p', 0.0)],
+        'B': [gate_results.get('b', 0.0)],
+        'Multiplier': [gate_results.get('multiplier', 0.0)],
+        'Market_State': [market_state.value],
+        'Put_Call_IV_Diff': [gate_results.get('skew_features', {}).get('put_call_iv_diff', 0.0)],
+        'Skew_Slope_Puts': [gate_results.get('skew_features', {}).get('skew_slope_puts', 0.0)],
+        'Smile_Curvature': [gate_results.get('skew_features', {}).get('smile_curvature', 0.0)],
+        'Front_IV': [gate_results.get('term_features', {}).get('front_iv', 0.0)],
+        'Back_IV': [gate_results.get('term_features', {}).get('back_iv', 0.0)],
+        'Term_Slope': [gate_results.get('term_features', {}).get('term_slope', 0.0)],
+        'Is_Inverted': [gate_results.get('term_features', {}).get('is_inverted', False)],
+        'Bid_Ask_Spread_Pct': [gate_results.get('execution_quality', {}).get('bid_ask_spread_pct', 0.0)],
+        'Quality_Score': [gate_results.get('execution_quality', {}).get('quality_score', 0.0)],
+        'Reflexive_Sleeve_Status': ['ACTIVE' if reflexive_plan else 'BLOCKED'],
+        'Reflexive_Sleeve_Legs': [len(reflexive_plan)],
+        'Capital': [capital_value]
+    }
+    
+    df = pd.DataFrame(data)
+    df.to_csv(csv_path, index=False)
+    
+    return csv_path
+
+
+def save_reflexive_plan(plan: list[LegPlan], output_dir: Path) -> None:
+    """
+    Save reflexive plan to JSON file.
+    
+    Args:
+        plan: List of LegPlan objects
+        output_dir: Output directory path
+    """
+    if not plan:
+        return
+    data = [
+        {
+            "leg": lp.leg,
+            "direction": lp.direction,
+            "dte": lp.dte,
+            "sleeve_entry": lp.sleeve_entry,
+            "stop_loss": lp.stop_loss,
+        }
+        for lp in plan
+    ]
+    plan_path = output_dir / "reflexive_plan.json"
+    plan_path.write_text(json.dumps(data, indent=2))
+
+
+def process_single_ticker(
+    ticker: str,
+    args,
+    output_dir: Path,
+    logger: logging.Logger,
+    analyzer: MarkovBlanketAnalyzer,
+    predictor: OptionPricingPredictor
+) -> dict:
+    """
+    Process a single ticker and return results dictionary.
+    
+    Returns:
+        Dictionary with keys: training_results, decomposition_results, skew_results,
+        gate_results, market_state, signals, reflexive_plan, capital_value, success
+    """
+    results = {
+        'training_results': None,
+        'decomposition_results': None,
+        'skew_results': None,
+        'gate_results': None,
+        'market_state': MarketState.PIN,
+        'signals': None,
+        'reflexive_plan': [],
+        'capital_value': args.capital if args.capital is not None else DEFAULT_CAPITAL,
+        'success': False
+    }
+    
+    try:
+        # Load data
+        console.print(f"[bold yellow]>>> Loading Option Data for {ticker}[/bold yellow]")
+        
+        if args.date:
+            option_df = load_option_chain_data(ticker.lower(), date=args.date)
+        else:
+            recent_date = get_most_recent_option_date(ticker.lower())
+            option_df = load_option_chain_data(ticker.lower())
+        
+        stock_price = get_latest_price(ticker)
+        current_date = datetime.now()
+        
+        console.print(f"[green]Loaded {len(option_df)} option contracts for {ticker}[/green]")
+        console.print(f"[green]Stock price: ${stock_price:.2f}[/green]")
+        logger.info(f"Loaded {len(option_df)} contracts, stock price: ${stock_price:.2f}")
+    except Exception as e:
+        console.print(f"[red]Error loading data for {ticker}: {e}[/red]")
+        logger.error(f"Error loading data for {ticker}: {e}", exc_info=True)
+        return results
+
+    # Prepare features
+    console.print(f"\n[bold yellow]>>> Preparing Features for {ticker}[/bold yellow]")
+    try:
+        call_data, put_data = DataPreparator.prepare_features(option_df, stock_price, current_date=current_date, use_log_target=args.log_target)
+        logger.info(f"Prepared features: {len(call_data['targets'])} call options")
+    except Exception as e:
+        console.print(f"[red]Error preparing features for {ticker}: {e}[/red]")
+        logger.error(f"Error preparing features for {ticker}: {e}", exc_info=True)
+        return results
+
+    # Plot feature correlation (skip in universal mode to save time)
+    if not args.universal:
+        console.print(f"\n[bold yellow]>>> Feature Correlation Analysis for {ticker}[/bold yellow]")
+        predictor.plot_feature_correlation(call_data, output_dir)
+
+    # Train models
+    console.print(f"\n[bold yellow]>>> Training Models for {ticker}[/bold yellow]")
+    training_results = predictor.train_models(call_data, put_data, n_folds=args.folds)
+    
+    if training_results is None:
+        console.print(f"[red]Failed to train models for {ticker}[/red]")
+        logger.error(f"Failed to train models for {ticker}")
+        return results
+    
+    results['training_results'] = training_results
+
+    # Decompose premium
+    console.print(f"\n[bold yellow]>>> Premium Decomposition for {ticker}[/bold yellow]")
+    decomposition_results = predictor.decompose_premium(call_data, put_data, training_results)
+    results['decomposition_results'] = decomposition_results
+
+    # Analyze skew
+    console.print(f"\n[bold yellow]>>> Skew Attribution Analysis for {ticker}[/bold yellow]")
+    skew_results = predictor.analyze_skew_attribution(call_data, put_data)
+    results['skew_results'] = skew_results
+
+    # Kelly Gate
+    console.print(f"\n[bold yellow]>>> Teixiptla-Garage-Markov Kelly Gate for {ticker}[/bold yellow]")
+    kelly_gate = KellyGate(logger=logger, debug=args.debug)
+    reflexive_plan: list[LegPlan] = []
+    market_state: MarketState = MarketState.PIN
+    capital_value = args.capital if args.capital is not None else DEFAULT_CAPITAL
+    
+    try:
+        gate_results = kelly_gate.compute_gate(
+            option_df, stock_price, current_date, call_data, put_data,
+            decomposition_results, skew_results, training_results
+        )
+        
+        # State Machine
+        execution_quality = gate_results.get('execution_quality', {})
+        skew_features = gate_results.get('skew_features', {})
+        
+        signals = MarketSignals(
+            regime=gate_results['regime'],
+            kelly_fraction=gate_results['kelly_fractional'],
+            gate_state=gate_results['gate_state'],
+            spread=execution_quality.get('bid_ask_spread_pct', 0.0) / 100.0 if execution_quality.get('bid_ask_spread_pct') else 0.0,
+            quality=execution_quality.get('quality_score', 0.0),
+            skew_slope=skew_features.get('skew_slope_puts', 0.0),
+            curvature=skew_features.get('smile_curvature', 0.0),
+        )
+        
+        market_state = compute_market_state(signals)
+        results['market_state'] = market_state
+        results['signals'] = signals
+        
+        # Reflexive Bifurcation Sleeve
+        if should_build_reflexive_sleeve(gate_results, market_state, force=args.force_reflexive):
+            try:
+                reflexive_plan = generate_reflexive_plan(
+                    K=capital_value,
+                    kelly_fraction=gate_results['kelly_fractional'],
+                    exp_cap_frac=REFLEXIVE_EXP_CAP_FRAC,
+                    stop_frac=REFLEXIVE_STOP_FRAC,
+                    dte_initial=REFLEXIVE_DTE_INITIAL,
+                    initial_direction=REFLEXIVE_INITIAL_DIR,
+                    max_legs=REFLEXIVE_MAX_LEGS,
+                )
+            except Exception as e:
+                logger.warning(f"Error generating reflexive sleeve for {ticker}: {e}")
+                reflexive_plan = []
+        
+        results['reflexive_plan'] = reflexive_plan
+        results['gate_results'] = gate_results
+        results['capital_value'] = capital_value
+        results['success'] = True
+        
+    except Exception as e:
+        console.print(f"[yellow]Error computing Kelly Gate for {ticker}: {e}[/yellow]")
+        logger.warning(f"Error computing Kelly Gate for {ticker}: {e}", exc_info=True)
+        # Use safe defaults
+        results['gate_results'] = {
+            'regime': 'PIN',
+            'structure_family': 'PROBE_ONLY',
+            'kelly_raw': 0.0,
+            'kelly_fractional': 0.0,
+            'kelly_adjusted': 0.0,
+            'gate_state': 'BLOCK',
+            'p': 0.5,
+            'b': 1.0,
+            'multiplier': 0.0,
+            'skew_features': {'put_call_iv_diff': 0.0, 'skew_slope_puts': 0.0, 'smile_curvature': 0.0},
+            'term_features': {'front_iv': 0.0, 'back_iv': 0.0, 'term_slope': 0.0, 'is_inverted': False},
+            'execution_quality': {'bid_ask_spread_pct': 10.0, 'quality_score': 0.5}
+        }
+        signals = MarketSignals(
+            regime=results['gate_results']['regime'],
+            kelly_fraction=results['gate_results']['kelly_fractional'],
+            gate_state=results['gate_results']['gate_state'],
+            spread=0.0,
+            quality=0.5,
+            skew_slope=0.0,
+            curvature=0.0,
+        )
+        results['market_state'] = compute_market_state(signals)
+        results['signals'] = signals
+    
+    return results
+
+
 def main():
     """Main execution function with CLI arguments."""
     parser = argparse.ArgumentParser(description='Markov Blanket-Driven Option Pricing Model')
@@ -1979,12 +2434,148 @@ def main():
     parser.add_argument('--debug', action='store_true', help='Print debug information for Kelly Gate')
     parser.add_argument('--sanity-test-masks', action='store_true', help='Run sanity test: temporarily set MASK_MAX_DTE=7 to verify top expressives cluster in nearest expiry')
     parser.add_argument('--test-expressive', action='store_true', help='Test EXPRESSIVE masks: temporarily reduce thresholds or bypass PIN damping to verify escalation works')
+    parser.add_argument('--capital', type=float, default=None, help=f'Total portfolio capital K (default: {DEFAULT_CAPITAL:.2f})')
+    parser.add_argument('--force-reflexive', action='store_true', help='Force reflexive sleeve generation even if gate is BLOCK or regime is PIN')
+    parser.add_argument('--universal', action='store_true', help='Process all tickers from tickers.json and save reports to output/markov/{TICKER}/')
     
     args = parser.parse_args()
     
     # v8: Ensure log_target is True by default (enabled)
     # With --no-log-target or --raw-premium pattern, log_target will be True unless flag is provided
 
+    # Handle universal mode
+    if args.universal:
+        # Load all tickers
+        try:
+            tickers = load_tickers()
+            console.print(f"[bold cyan]Universal mode: Processing {len(tickers)} tickers[/bold cyan]")
+        except Exception as e:
+            console.print(f"[red]Error loading tickers: {e}[/red]")
+            return
+        
+        # Setup universal output directory
+        universal_output_dir = Path("../output") / "markov"
+        universal_output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Setup logging for universal mode
+        logger = setup_logging(universal_output_dir)
+        logger.info(f"Starting universal analysis for {len(tickers)} tickers")
+        
+        successful = []
+        failed = []
+        
+        for idx, ticker in enumerate(tickers, 1):
+            ticker = ticker.upper()
+            console.print(f"\n{'='*80}")
+            console.print(f"[bold magenta]Processing {ticker} ({idx}/{len(tickers)})[/bold magenta]")
+            console.print('='*80)
+            
+            # Create ticker-specific output directory
+            ticker_output_dir = universal_output_dir / ticker
+            ticker_output_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Create fresh analyzer and predictor instances for each ticker to avoid state contamination
+            analyzer = MarkovBlanketAnalyzer()
+            predictor = OptionPricingPredictor(analyzer, logger, model_type=args.model)
+            
+            # Process ticker
+            try:
+                results = process_single_ticker(ticker, args, ticker_output_dir, logger, analyzer, predictor)
+                
+                # Try to save reports even if processing had partial failures
+                # (e.g., if training failed but we have gate_results from defaults)
+                reports_saved = False
+                try:
+                    # Ensure we have at least gate_results (should always be present)
+                    if results.get('gate_results') is None:
+                        results['gate_results'] = {
+                            'regime': 'PIN',
+                            'structure_family': 'PROBE_ONLY',
+                            'kelly_raw': 0.0,
+                            'kelly_fractional': 0.0,
+                            'kelly_adjusted': 0.0,
+                            'gate_state': 'BLOCK',
+                            'p': 0.5,
+                            'b': 1.0,
+                            'multiplier': 0.0,
+                            'skew_features': {'put_call_iv_diff': 0.0, 'skew_slope_puts': 0.0, 'smile_curvature': 0.0},
+                            'term_features': {'front_iv': 0.0, 'back_iv': 0.0, 'term_slope': 0.0, 'is_inverted': False},
+                            'execution_quality': {'bid_ask_spread_pct': 10.0, 'quality_score': 0.5}
+                        }
+                    
+                    # Ensure we have market_state and signals
+                    if results.get('market_state') is None:
+                        results['market_state'] = MarketState.PIN
+                    if results.get('signals') is None and results.get('gate_results'):
+                        results['signals'] = MarketSignals(
+                            regime=results['gate_results'].get('regime', 'PIN'),
+                            kelly_fraction=results['gate_results'].get('kelly_fractional', 0.0),
+                            gate_state=results['gate_results'].get('gate_state', 'BLOCK'),
+                            spread=0.0,
+                            quality=0.5,
+                            skew_slope=0.0,
+                            curvature=0.0,
+                        )
+                    
+                    # Save reports
+                    md_path = save_markdown_report(
+                        ticker, results.get('training_results'), results.get('decomposition_results'),
+                        results.get('skew_results', {'r2': 0.0}), results['gate_results'], results['market_state'],
+                        results['signals'], results.get('reflexive_plan', []), results.get('capital_value', DEFAULT_CAPITAL),
+                        ticker_output_dir
+                    )
+                    csv_path = save_csv_report(
+                        ticker, results.get('training_results'), results.get('decomposition_results'),
+                        results.get('skew_results', {'r2': 0.0}), results['gate_results'], results['market_state'],
+                        results['signals'], results.get('reflexive_plan', []), results.get('capital_value', DEFAULT_CAPITAL),
+                        ticker_output_dir
+                    )
+                    save_reflexive_plan(results.get('reflexive_plan', []), ticker_output_dir)
+                    
+                    reports_saved = True
+                    console.print(f"[green]✓ {ticker}: Reports saved to {ticker_output_dir}[/green]")
+                    logger.info(f"Successfully processed {ticker}: {md_path}, {csv_path}")
+                    
+                    if results.get('success', False):
+                        successful.append(ticker)
+                    else:
+                        # Partial success - reports saved but processing had issues
+                        console.print(f"[yellow]⚠ {ticker}: Reports saved but processing had issues[/yellow]")
+                        successful.append(ticker)
+                        
+                except Exception as e:
+                    console.print(f"[red]Error saving reports for {ticker}: {e}[/red]")
+                    logger.error(f"Error saving reports for {ticker}: {e}", exc_info=True)
+                    failed.append(ticker)
+                    
+            except Exception as e:
+                console.print(f"[red]✗ {ticker}: Processing failed with exception: {e}[/red]")
+                logger.error(f"Processing failed for {ticker}: {e}", exc_info=True)
+                failed.append(ticker)
+            finally:
+                # Clear state after processing (help with memory management)
+                try:
+                    del analyzer
+                    del predictor
+                except:
+                    pass
+                import gc
+                gc.collect()
+        
+        # Print summary
+        console.print(f"\n{'='*80}")
+        console.print("[bold green]UNIVERSAL MODE SUMMARY[/bold green]")
+        console.print('='*80)
+        console.print(f"Successfully processed: {len(successful)}/{len(tickers)} tickers")
+        if successful:
+            console.print(f"\n[green]Successful:[/green] {', '.join(successful)}")
+        if failed:
+            console.print(f"\n[red]Failed:[/red] {', '.join(failed)}")
+        console.print(f"\n[dim]Reports saved to: {universal_output_dir}[/dim]")
+        console.print('='*80)
+        return
+
+    # Single ticker mode (original behavior)
     # Setup output directory
     if args.output:
         output_dir = Path(args.output)
@@ -2058,6 +2649,11 @@ def main():
     # Kelly Gate
     console.print("\n[bold yellow]>>> Teixiptla-Garage-Markov Kelly Gate[/bold yellow]")
     kelly_gate = KellyGate(logger=logger, debug=args.debug)
+    reflexive_plan: list[LegPlan] = []  # Initialize reflexive plan
+    market_state: MarketState = MarketState.PIN  # Initialize to PIN (safest default)
+    capital_value = args.capital if args.capital is not None else DEFAULT_CAPITAL
+    if args.capital is None:
+        logger.warning(f"Using default capital: ${capital_value:.2f}. Use --capital to override.")
     try:
         gate_results = kelly_gate.compute_gate(
             option_df, stock_price, current_date, call_data, put_data,
@@ -2092,6 +2688,63 @@ def main():
         except Exception as e:
             console.print(f"[yellow]Error saving gate JSON: {e}[/yellow]")
             logger.warning(f"Error saving gate JSON: {e}")
+        
+        # State Machine
+        # Build MarketSignals from existing data
+        execution_quality = gate_results.get('execution_quality', {})
+        skew_features = gate_results.get('skew_features', {})
+        
+        signals = MarketSignals(
+            regime=gate_results['regime'],
+            kelly_fraction=gate_results['kelly_fractional'],
+            gate_state=gate_results['gate_state'],
+            spread=execution_quality.get('bid_ask_spread_pct', 0.0) / 100.0 if execution_quality.get('bid_ask_spread_pct') else 0.0,
+            quality=execution_quality.get('quality_score', 0.0),
+            skew_slope=skew_features.get('skew_slope_puts', 0.0),
+            curvature=skew_features.get('smile_curvature', 0.0),
+        )
+        
+        # Compute market state
+        market_state = compute_market_state(signals)
+        actions_text = describe_actions(market_state)
+        logger.info("Market state: %s (actions: %s)", market_state.value, actions_text)
+        
+        # Reflexive Bifurcation Sleeve
+        console.print("\n[bold yellow]>>> Reflexive Bifurcation Sleeve[/bold yellow]")
+        # Generate reflexive sleeve plan if permitted
+        if should_build_reflexive_sleeve(gate_results, market_state, force=args.force_reflexive):
+            try:
+                reflexive_plan = generate_reflexive_plan(
+                    K=capital_value,
+                    kelly_fraction=gate_results['kelly_fractional'],
+                    exp_cap_frac=REFLEXIVE_EXP_CAP_FRAC,
+                    stop_frac=REFLEXIVE_STOP_FRAC,
+                    dte_initial=REFLEXIVE_DTE_INITIAL,
+                    initial_direction=REFLEXIVE_INITIAL_DIR,
+                    max_legs=REFLEXIVE_MAX_LEGS,
+                )
+                if reflexive_plan:
+                    console.print(f"[green]Generated reflexive sleeve with {len(reflexive_plan)} leg(s)[/green]")
+                    logger.info(f"Reflexive sleeve legs: {len(reflexive_plan)}")
+                    logger.info(f"Reflexive sleeve plan: {[(lp.leg, lp.direction, lp.sleeve_entry) for lp in reflexive_plan]}")
+                else:
+                    console.print("[yellow]Reflexive sleeve plan is empty (Kelly fraction too small)[/yellow]")
+            except Exception as e:
+                console.print(f"[yellow]Error generating reflexive sleeve: {e}[/yellow]")
+                logger.warning(f"Error generating reflexive sleeve: {e}", exc_info=True)
+                reflexive_plan = []
+        else:
+            reason = []
+            if gate_results.get('gate_state') == "BLOCK":
+                reason.append("gate is BLOCK")
+            if gate_results.get('regime') == "PIN":
+                reason.append("regime is PIN")
+            if gate_results.get('kelly_fractional', 0.0) <= 0.0:
+                reason.append("Kelly fraction is zero or negative")
+            reason_str = ", ".join(reason) if reason else "unknown"
+            console.print(f"[yellow]Reflexive sleeve not permitted: {reason_str}[/yellow]")
+            logger.info("Reflexive sleeve not permitted: gate_state=%s, regime=%s, kelly_fractional=%.4f",
+                       gate_results.get('gate_state'), gate_results.get('regime'), gate_results.get('kelly_fractional', 0.0))
         
         # Create contract scores CSV
         try:
@@ -2180,6 +2833,18 @@ def main():
             'term_features': {'front_iv': 0.0, 'back_iv': 0.0, 'term_slope': 0.0, 'is_inverted': False},
             'execution_quality': {'bid_ask_spread_pct': 10.0, 'quality_score': 0.5}
         }
+        reflexive_plan = []  # Empty plan on error
+        # Compute state machine with default gate_results
+        signals = MarketSignals(
+            regime=gate_results['regime'],
+            kelly_fraction=gate_results['kelly_fractional'],
+            gate_state=gate_results['gate_state'],
+            spread=0.0,
+            quality=0.5,
+            skew_slope=0.0,
+            curvature=0.0,
+        )
+        market_state = compute_market_state(signals)
 
     # Markov Masks
     console.print("\n[bold yellow]>>> Markov Masks (Contract-Level Agency)[/bold yellow]")
@@ -2503,6 +3168,16 @@ def main():
     # Save models
     console.print("\n[bold yellow]>>> Saving Models[/bold yellow]")
     predictor.save_models(output_dir)
+    
+    # Save reflexive plan
+    try:
+        save_reflexive_plan(reflexive_plan, output_dir)
+        if reflexive_plan:
+            console.print(f"[green]Reflexive plan saved: {output_dir / 'reflexive_plan.json'}[/green]")
+            logger.info(f"Reflexive plan saved: {output_dir / 'reflexive_plan.json'}")
+    except Exception as e:
+        console.print(f"[yellow]Error saving reflexive plan: {e}[/yellow]")
+        logger.warning(f"Error saving reflexive plan: {e}")
 
     # Summary
     console.print("\n" + "="*80)
@@ -2538,7 +3213,37 @@ def main():
         f"inverted={gate_results['term_features']['is_inverted']}\n"
         f"  • Execution: spread={gate_results['execution_quality']['bid_ask_spread_pct']:.2f}%, "
         f"quality={gate_results['execution_quality']['quality_score']:.3f}\n\n"
-        f"[dim]Results saved to: {output_dir}[/dim]\n"
+    )
+    
+    # Add Reflexive Sleeve section
+    if not reflexive_plan:
+        reflexive_section = (
+            "───────────────────── Reflexive Sleeve ─────────────────────\n"
+            "Gate: BLOCKED\n"
+            f"Reason: Kelly Gate or Teixiptla regime does not permit reflexive nesting.\n"
+        )
+    else:
+        # Calculate effective sleeve
+        E0 = REFLEXIVE_EXP_CAP_FRAC * capital_value
+        E0_eff = min(E0, gate_results['kelly_fractional'] * capital_value)
+        
+        # Build leg table
+        leg_lines = ["Leg  Dir   DTE(d)   Sleeve   Stop", "---  ----  ------   ------   ----"]
+        for lp in reflexive_plan:
+            leg_lines.append(
+                f" {lp.leg}   {lp.direction.upper():4s}  {lp.dte:6.1f}  ${lp.sleeve_entry:7.2f}  ${lp.stop_loss:7.2f}"
+            )
+        leg_table = "\n".join(leg_lines)
+        
+        reflexive_section = (
+            "───────────────────── Reflexive Sleeve ─────────────────────\n"
+            f"Max sleeve cap: {REFLEXIVE_EXP_CAP_FRAC:.0%} of K (K=${capital_value:.2f})\n"
+            f"Effective sleeve (Kelly-limited): ${E0_eff:.2f}\n\n"
+            f"{leg_table}\n"
+        )
+    
+    summary_text = summary_text + "\n" + reflexive_section + (
+        f"\n[dim]Results saved to: {output_dir}[/dim]\n"
         "[dim]This demonstrates how Markov blanket features capture market inefficiencies[/dim]\n"
         "[dim]beyond traditional Black-Scholes assumptions.[/dim]"
     )
@@ -2559,6 +3264,50 @@ def main():
     )
     gate_panel = Panel(gate_panel_text, title="[bold cyan]Kelly Gate[/bold cyan]", border_style="cyan")
     console.print(gate_panel)
+    
+    # State Machine panel
+    actions_text = describe_actions(market_state)
+    state_machine_text = (
+        f"[bold]Current state:[/bold] {market_state.value}\n"
+        f"[bold]Actions:[/bold] {actions_text}\n"
+        f"[bold]Notes:[/bold] Derived from regime={signals.regime}, gate={signals.gate_state}, "
+        f"Kelly={signals.kelly_fraction:.4f}"
+    )
+    state_machine_panel = Panel(state_machine_text, title="[bold cyan]State Machine[/bold cyan]", border_style="cyan")
+    console.print(state_machine_panel)
+    
+    # Also print ASCII-style box for consistency with summary text
+    console.print("\n╭──────────────────────────── State Machine ─────────────────────────────╮")
+    state_line = f"│ Current state: {market_state.value:<57}│"
+    console.print(state_line)
+    # Wrap actions text if needed (max 63 chars for Actions line)
+    if len(actions_text) > 63:
+        # Simple wrap at word boundary
+        words = actions_text.split()
+        lines = []
+        current_line = ""
+        for word in words:
+            test_line = current_line + (" " + word if current_line else word)
+            if len(test_line) <= 63:
+                current_line = test_line
+            else:
+                if current_line:
+                    lines.append(f"│ Actions: {current_line:<63}│")
+                current_line = word
+        if current_line:
+            lines.append(f"│ Actions: {current_line:<63}│")
+        for line in lines:
+            console.print(line)
+    else:
+        console.print(f"│ Actions: {actions_text:<63}│")
+    notes_line = f"│ Notes: Derived from regime={signals.regime}, gate={signals.gate_state}, Kelly={signals.kelly_fraction:.4f}"
+    # Truncate if too long (max 75 chars total including "│ Notes: ")
+    max_notes_len = 75 - len("│ Notes: ")
+    if len(notes_line) > 75:
+        notes_line = notes_line[:72] + "..."
+    notes_line = notes_line.ljust(75) + "│"
+    console.print(notes_line)
+    console.print("╰────────────────────────────────────────────────────────────────────────╯")
     
     # Deterministic narrative output (publication-ready)
     console.print("\n[bold yellow]>>> Narrative Summary[/bold yellow]")

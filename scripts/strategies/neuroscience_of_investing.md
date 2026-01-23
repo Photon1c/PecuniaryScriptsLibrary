@@ -1,6 +1,6 @@
 # The Neuroscience of Investing
 
-🧠 The Gambler’s Brain (Outcome-Driven Loop)
+### 🧠 The Gambler’s Brain (Outcome-Driven Loop)
 
 In the gambler’s brain, market events trigger a surge of anticipation rather than careful evaluation. Losses, near-misses, or sudden price moves activate dopamine systems that push the brain to seek immediate emotional resolution. At the same time, stress and threat responses weaken rational control, making it harder to pause or stay neutral. The result is a powerful urge to “get it back” by acting again—often by trading larger, flipping direction, or re-entering too quickly. Being flat feels uncomfortable, not because of missed opportunity, but because the brain experiences the trade as unfinished. Decisions become driven by the need to relieve tension rather than by new information, leading to overtrading and escalating risk.
 
@@ -44,7 +44,7 @@ flowchart LR
 
 ```
 
-🧠 The Disciplined Trader’s Brain (Process-Driven Loop)
+### 🧠 The Disciplined Trader’s Brain (Process-Driven Loop)
 
 In the disciplined trader’s brain, market information is first filtered through rules, planning, and external structure rather than emotion. Signals of risk or uncertainty trigger a deliberate permission check: is a trade actually allowed under the model? Dopamine is released not for excitement or outcomes, but for following the process correctly—including staying flat or exiting early when conditions aren’t met. This makes inaction a stable and rewarding state instead of a source of anxiety. By outsourcing authority to a clear framework, the trader avoids impulsive reactions and only acts when structural conditions change. Decisions feel complete even without re-entry, because the brain is rewarded for informational closure, not emotional closure.
 
@@ -107,7 +107,7 @@ flowchart LR
     class CUE,ENTER,EXIT,FLAT,REVIEW neutral;
 ```
 
-Why This Matters
+### Why This Matters
 
 Most people don’t lose money in markets because they lack intelligence or information—they lose because their brains are wired to seek emotional relief under uncertainty. Without structure, the nervous system treats losses as unresolved threats and pushes users to act again, even when no new opportunity exists. This is how overtrading, revenge trades, and “getting caught in the middle” happen.
 

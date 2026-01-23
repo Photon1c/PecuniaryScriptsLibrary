@@ -115,15 +115,15 @@ Understanding the difference between a gambler’s brain and a disciplined trade
 
 In practice, this means better capital preservation, fewer impulsive errors, and clearer thinking under pressure. More importantly, it restores agency: instead of reacting to the market, the user operates within it deliberately. Markets are uncertain by nature—but the way decisions are made doesn’t have to be.
 
-Works Cited
+## Works Cited
 
-Kahneman, Daniel. Thinking, Fast and Slow. Farrar, Straus and Giroux, 2011.
+*Kahneman, Daniel. Thinking, Fast and Slow. Farrar, Straus and Giroux, 2011.*
 — Foundational work distinguishing fast, emotion-driven decision systems from slow, rule-based reasoning; widely cited in behavioral finance.
 
-Schultz, Wolfram. “Dopamine Reward Prediction Error Coding.” Dialogues in Clinical Neuroscience, vol. 18, no. 1, 2016, pp. 23–32.
+*Schultz, Wolfram. “Dopamine Reward Prediction Error Coding.” Dialogues in Clinical Neuroscience, vol. 18, no. 1, 2016, pp. 23–32.*
 — Establishes that dopamine responds to prediction errors and anticipation rather than outcomes, central to understanding gambling behavior.
 
-Bechara, Antoine, et al. “Decision-Making and Addiction (Part I): Impaired Activation of Somatic States in Substance Dependent Individuals.” Neuropsychologia, vol. 40, no. 10, 2002, pp. 1675–1689.
+*Bechara, Antoine, et al. “Decision-Making and Addiction (Part I): Impaired Activation of Somatic States in Substance Dependent Individuals.” Neuropsychologia, vol. 40, no. 10, 2002, pp. 1675–1689.*
 — Demonstrates how emotional circuitry can override executive control under risk and uncertainty.
 
 Lo, Andrew W., and Dmitry V. Repin. “The Psychophysiology of Real-Time Financial Risk Processing.” Journal of Cognitive Neuroscience, vol. 14, no. 3, 2002, pp. 323–339.

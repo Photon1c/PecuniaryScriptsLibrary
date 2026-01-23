@@ -1,10 +1,19 @@
 # Markov Blanket Analysis for Option Pricing
 
-A Python implementation of Markov blanket discovery for Bayesian networks applied to option pricing prediction. This tool identifies the minimal set of variables that render the option premium conditionally independent of all other variables in a probabilistic graphical model.
+A comprehensive Python implementation of Markov blanket discovery for Bayesian networks applied to option pricing prediction. This tool identifies the minimal set of variables that render the option premium conditionally independent of all other variables, then uses machine learning to build predictive models with Kelly Gate permission layers and state machine-driven trading decisions.
 
 ## Overview
 
-This project implements a Bayesian network approach to option pricing that goes beyond traditional models like Black-Scholes by identifying causal relationships between market variables. The Markov blanket of the "option premium" node provides an optimal feature set for prediction, potentially capturing market inefficiencies, sentiment-driven effects, and feedback loops that traditional models miss.
+This project implements a Bayesian network approach to option pricing that goes beyond traditional models like Black-Scholes by identifying causal relationships between market variables. The Markov blanket of the "option premium" node provides an optimal feature set for prediction, capturing market inefficiencies, sentiment-driven effects, and feedback loops that traditional models miss.
+
+The system includes:
+- **Markov Blanket Discovery**: Optimal feature selection via Bayesian networks
+- **Machine Learning Models**: LightGBM-based predictive models with residual decomposition
+- **Kelly Gate**: Permission layer for option trading with regime inference
+- **State Machine**: Explicit market state classification (PIN, RANGE, TREND, RUPTURE, etc.)
+- **Reflexive Bifurcation Sleeve**: Nested leg planning for option strategies
+- **Markov Masks**: Contract-level agency encoding
+- **Batch Processing**: Universal mode for processing multiple tickers
 
 ## What is a Markov Blanket?
 
@@ -18,169 +27,240 @@ This set shields $P$ from irrelevant variables and serves as an optimal feature 
 
 ## Features
 
+### Core Analysis
 - ✅ **Markov Blanket Discovery**: Automatically computes the Markov blanket for the option premium node
 - ✅ **Bayesian Network Visualization**: Generates network graphs with highlighted Markov blanket nodes
-- ✅ **Real Option Data Analysis**: Loads and analyzes actual SPY option chain data
-- ✅ **Option Chain Display**: Shows detailed bid/ask spreads for strikes near current price
-- ✅ **Data Export**: Saves option chain data to CSV and formatted text files
-- ✅ **Beautiful Terminal Output**: Uses Rich library for professional console formatting
-- ✅ **Cyberpunk Styling**: Modern visualization aesthetics with mplcyberpunk
+- ✅ **Real Option Data Analysis**: Loads and analyzes actual option chain data
+- ✅ **Premium Decomposition**: Separates classical (Black-Scholes) from extra (volume/news) components
+- ✅ **Skew Attribution**: Analyzes put-call IV differences and volatility skew
+
+### Machine Learning
+- ✅ **LightGBM Models**: Classical, full, and residual models with cross-validation
+- ✅ **Feature Engineering**: Moneyness, log transforms, interaction terms
+- ✅ **SHAP Integration**: Model interpretability with SHAP plots (optional)
+- ✅ **Model Persistence**: Save/load trained models
+
+### Trading Decision Framework
+- ✅ **Kelly Gate**: Regime inference (PIN/EXPRESSIVE/RUPTURE_CANDIDATE), structure family recommendation, Kelly sizing
+- ✅ **State Machine**: Explicit market state classification with action policies
+- ✅ **Reflexive Bifurcation Sleeve**: Nested leg planning for option strategies
+- ✅ **Markov Masks**: Contract-level agency encoding (SENSITIVE/EXPRESSIVE/DORMANT)
+
+### Batch Processing & Reporting
+- ✅ **Universal Mode**: Process all tickers from `tickers.json` in batch
+- ✅ **Report Generation**: Automatic markdown and CSV reports per ticker
+- ✅ **Aggregate Reports**: Summary tables grouped by regime, structure, gate state, etc.
 
 ## Installation
 
-### Dependencies
+See [SETUP.md](SETUP.md) for detailed installation instructions.
+
+### Quick Install
 
 ```bash
-pip install numpy pandas matplotlib mplcyberpunk rich networkx lightgbm scikit-learn scipy
+cd metascripts/markov
+pip install -r requirements.txt
 ```
 
-**Optional (for SHAP plots):**
-```bash
-pip install shap
-```
+### Required Dependencies
 
-### Required Modules
+- `numpy`, `pandas`, `matplotlib`, `scipy`
+- `scikit-learn`, `lightgbm`
+- `rich`, `mplcyberpunk`
+- `networkx` (for testA.py)
 
-- `numpy` - Numerical computations
-- `pandas` - Data manipulation
-- `matplotlib` - Plotting
-- `mplcyberpunk` - Cyberpunk-style visualizations
-- `rich` - Beautiful terminal output
-- `networkx` - Graph operations
-- `lightgbm` - Gradient boosting regressor (for testB.py)
-- `scikit-learn` - Machine learning utilities (for testB.py)
-- `scipy` - Scientific computing (for testB.py)
-- `shap` (optional) - SHAP plots for model interpretability
+### Optional Dependencies
+
+- `shap` - For SHAP plots and model interpretability
+- `seaborn` - Enhanced visualizations
 
 ## Usage
 
 ### Basic Usage (testA.py - Network Analysis)
 
 ```bash
-cd markov
+cd metascripts/markov
 python testA.py
 ```
 
 The script will:
 1. Display the Markov blanket analysis for option pricing
-2. Load the most recent SPY option chain data
+2. Load the most recent option chain data
 3. Show a summary table of strikes near the current price
 4. Save detailed option chain data to `../output/` directory
 5. Generate a network visualization (`markov_blanket_network.png`)
 
-### Advanced Usage (testB.py - Predictive Model with Kelly Gate & Markov Masks)
+### Advanced Usage (testB.py - Full Analysis)
 
-**Quick Start:**
+#### Single Ticker Analysis
+
 ```bash
-cd markov
+# Basic run
 python testB.py --ticker SPY
+
+# With specific date
+python testB.py --ticker SPY --date 2025-01-19
+
+# With custom capital for reflexive sleeve
+python testB.py --ticker SPY --capital 50000
+
+# Skip SHAP plots for faster execution
+python testB.py --ticker SPY --skip-shap
+
+# Debug mode (detailed Kelly Gate output)
+python testB.py --ticker SPY --debug
 ```
 
-**With Sanity Test (verify mask engine):**
+#### Universal Mode (Batch Processing)
+
+Process all tickers from `tickers.json`:
+
 ```bash
-python testB.py --ticker SPY --sanity-test-masks
+python testB.py --universal
 ```
 
-**With EXPRESSIVE Test (verify escalation):**
+This will:
+- Load all tickers from `tickers.json`
+- Process each ticker individually
+- Save reports to `output/markov/{TICKER}/` subdirectories
+- Generate `{TICKER}_report.md` and `{TICKER}_report.csv` for each ticker
+- Display progress and summary statistics
+
+**Universal Mode Options:**
 ```bash
-python testB.py --ticker SPY --test-expressive
+# Universal mode with custom capital
+python testB.py --universal --capital 100000
+
+# Universal mode with force reflexive (override gates)
+python testB.py --universal --force-reflexive
 ```
 
-**Full Options:**
-```bash
-python testB.py \
-  --ticker SPY \
-  --date 2025-12-28 \
-  --folds 5 \
-  --skip-shap \
-  --debug \
-  --sanity-test-masks \
-  --test-expressive
-```
+#### Command-Line Arguments
 
-**Command-Line Arguments:**
+**Basic Options:**
 - `--ticker SPY` - Stock ticker symbol (default: SPY)
 - `--date YYYY-MM-DD` - Option chain date (default: most recent)
 - `--folds 5` - Number of cross-validation folds (default: 5)
+- `--output DIR` - Custom output directory (default: dated folder)
+
+**Analysis Options:**
 - `--skip-shap` - Skip SHAP plots for faster execution
 - `--use-pca` - Use PCA on classical features (experimental)
 - `--no-log-target` or `--raw-premium` - Use raw premium instead of log(premium+1)
 - `--debug` - Print debug information for Kelly Gate
-- `--sanity-test-masks` - Run sanity test: temporarily set MASK_MAX_DTE=7 to verify top expressives cluster in nearest expiry
-- `--test-expressive` - Test EXPRESSIVE masks: temporarily reduce thresholds or bypass PIN damping to verify escalation works
 
-**What testB.py does:**
-1. Trains ML regressors (LightGBM) on Markov blanket features
-2. Decomposes premium into "classical" (Black-Scholes) and "extra" components
-3. Analyzes skew attribution (put-call IV differences)
-4. Computes Kelly Gate (regime inference, structure family, Kelly sizing)
-5. Generates Markov Masks (contract-level agency encoding)
-6. Saves models, visualizations, and analysis results to dated output folder
+**Testing Options:**
+- `--sanity-test-masks` - Run sanity test: temporarily set MASK_MAX_DTE=7
+- `--test-expressive` - Test EXPRESSIVE masks: reduce thresholds or bypass PIN damping
 
-### Data Requirements
+**Trading Options:**
+- `--capital FLOAT` - Total portfolio capital K (default: 10000.0)
+- `--force-reflexive` - Force reflexive sleeve generation even if gate is BLOCK
 
-The script expects data in the following structure:
+**Batch Processing:**
+- `--universal` - Process all tickers from tickers.json
 
-**Stock Data:**
-- Location: `F:/inputs/stocks/`
-- Format: CSV files with columns: `Date`, `Close/Last`, `Volume`, `Open`, `High`, `Low`
-- Example: `F:/inputs/stocks/SPY.csv`
+### Aggregate Reports (aggregate_reports.py)
 
-**Option Chain Data:**
-- Location: `F:/inputs/options/log/{ticker}/`
-- Format: CSV files named `{ticker}_quotedata.csv` in date directories
-- Example: `F:/inputs/options/log/spy/12_22_2025/spy_quotedata.csv`
+Generate summary tables from all ticker reports:
 
-You can modify the base directories in `data_loader.py` if your data is stored elsewhere.
+```bash
+python aggregate_reports.py
+```
+
+This will:
+- Load all `{TICKER}_report.csv` files from `output/markov/{TICKER}/`
+- Generate summary tables grouped by:
+  - Regime
+  - Structure Family
+  - Gate State
+  - Market State
+  - Regime + Structure (combined)
+  - Regime + Gate State (combined)
+- Save aggregated reports to `output/markov/aggregated/`
+- Display Rich tables in console
+
+**Output Files:**
+- `all_tickers_combined_{timestamp}.csv` - All ticker data combined
+- `summary_{name}_{timestamp}.csv` - Individual summary tables
+- `summary_report_{timestamp}.md` - Markdown report with all summaries
+
+## What testB.py Does
+
+The full analysis pipeline includes:
+
+1. **Data Loading**: Loads option chain data and stock prices
+2. **Feature Preparation**: Extracts classical (Black-Scholes) and full (Markov blanket) features
+3. **Model Training**: 
+   - Classical model (5 features: S, σ, r, τ, K)
+   - Full model (8+ features: adds V, N, interactions)
+   - Residual model (trained on residuals to isolate volume/news effects)
+4. **Premium Decomposition**: Separates premium into classical vs. extra components
+5. **Skew Attribution**: Analyzes put-call IV differences using Ridge regression
+6. **Kelly Gate**: 
+   - Regime inference (PIN/EXPRESSIVE/RUPTURE_CANDIDATE)
+   - Structure family recommendation (PROBE_ONLY/NORMAL/EXPLOIT)
+   - Kelly sizing with multipliers
+   - Gate state determination (BLOCK/OPEN/PARTIAL)
+7. **State Machine**: Maps signals to explicit market states with action policies
+8. **Reflexive Sleeve**: Generates nested leg plans when permitted
+9. **Markov Masks**: Contract-level agency encoding
+10. **Visualizations**: SHAP plots, correlation heatmaps, analysis charts
+11. **Report Generation**: Saves models, JSON, CSV, and markdown reports
 
 ## File Structure
 
 ```
 markov/
-├── README.md              # This file
-├── testA.py               # Network analysis script (Markov blanket discovery)
-├── testB.py               # Predictive model script (ML + Kelly Gate + Markov Masks)
-├── markov_mask.py         # Markov Masks module (contract-level agency)
-├── kelly_gate.py          # Kelly Gate module (regime inference, sizing)
-├── data_loader.py         # Data loading utilities
-├── test_viz.py            # Visualization test script
-├── wiki                   # Theoretical background on Markov blankets
-├── outlineA.md            # Implementation outline and methodology
-└── markov_blanket_network.png  # Generated network visualization
+├── README.md                    # This file
+├── SETUP.md                     # Installation guide
+├── requirements.txt             # Python dependencies
+├── testA.py                     # Network analysis (Markov blanket discovery)
+├── testB.py                     # Full predictive model (ML + Kelly Gate + State Machine)
+├── aggregate_reports.py         # Batch report aggregator
+├── markov_mask.py               # Markov Masks module (contract-level agency)
+├── reflexive_bifurcation.py    # Reflexive sleeve planning
+├── state_machine.py             # Market state classification
+├── data_loader.py               # Data loading utilities
+├── test_viz.py                  # Visualization test script
+├── dev/                         # Development documentation
+│   ├── KELLY_GATE_README.md
+│   ├── MARKOV_MASKS_README.md
+│   ├── outlineA.md
+│   └── outlineB.md
+└── wiki.md                      # Theoretical background
 ```
 
 ## Output Files
 
-### Terminal Output
+### Single Ticker Mode
 
-The script displays:
-- **Markov Blanket Analysis**: Components (parents, children, spouses) and insights
-- **Option Chain Summary**: Compact table showing strikes, bid/ask prices, moneyness, and volume
-- **File Save Confirmation**: Paths to saved CSV and text files
+Results are saved to `../output/analysis_{TIMESTAMP}/`:
 
-### Generated Files
+- **Models**: `classical_model.pkl`, `full_model.pkl`, `residual_model.pkl`, `skew_model.pkl`
+- **Data**: `contract_scores.csv`, `markov_masks.csv`, `markov_masks.json`
+- **Gate Results**: `gate.json`, `reflexive_plan.json`
+- **Visualizations**: 
+  - `feature_correlation_{timestamp}.png`
+  - `markov_blanket_analysis_{timestamp}.png`
+  - `shap_*.png` (if SHAP is installed)
+- **Logs**: `analysis_{timestamp}.log`
 
-**Network Visualization:**
-- `markov_blanket_network.png` - Bayesian network graph with highlighted Markov blanket
+### Universal Mode
 
-**Option Chain Data** (saved to `../output/`):
-- `{TICKER}_option_chain_{TIMESTAMP}.csv` - Machine-readable option data
-- `{TICKER}_option_chain_{TIMESTAMP}.txt` - Human-readable formatted report
+Results are saved to `../output/markov/{TICKER}/`:
 
-### CSV Format
+- `{TICKER}_report.md` - Markdown report with full analysis
+- `{TICKER}_report.csv` - CSV with key metrics
+- `reflexive_plan.json` - Reflexive sleeve plan (if applicable)
 
-```csv
-Strike,Call_Bid,Call_Ask,Call_Volume,Put_Bid,Put_Ask,Put_Volume,Moneyness,Total_Volume,Stock_Price
-681.0,3.95,4.08,23567,0.0,0.01,142132,ITM,165699,684.83
-685.0,0.03,0.04,930132,0.04,0.05,493488,ATM,1423620,684.83
-```
+### Aggregate Reports
 
-### Text Report Format
+Results are saved to `../output/markov/aggregated/`:
 
-The text file includes:
-- Header with generation timestamp and stock price
-- Detailed option chain table with all strikes
-- Summary statistics (total volume, average spreads)
+- `all_tickers_combined_{timestamp}.csv` - All ticker data
+- `summary_{name}_{timestamp}.csv` - Summary tables
+- `summary_report_{timestamp}.md` - Markdown summary report
 
 ## Bayesian Network Structure
 
@@ -215,52 +295,89 @@ Traditional Black-Scholes uses only the 5 parent variables. The Markov blanket a
 - **Trading_Volume** (child) - Captures market activity and liquidity effects
 - **News** (spouse) - Captures sentiment-driven volatility and external shocks
 
-These additional variables can help capture market inefficiencies that Black-Scholes misses.
+These additional variables help capture market inefficiencies that Black-Scholes misses.
+
+## State Machine
+
+The state machine maps current market signals into explicit states:
+
+- **PIN**: Hard block, no directional trades, probes only
+- **RANGE**: Pinned but with some permission, light probes allowed
+- **TREND**: Directional entries allowed with modest reflexive sleeve
+- **RUPTURE_PREP**: Small seed positions and staged reflexive sleeve
+- **RUPTURE_ACTIVE**: Full reflexive sleeve allowed within Kelly and risk caps
+- **COOLDOWN**: Stand down, no new risk
+
+States are derived from regime, Kelly fraction, and gate state.
+
+## Reflexive Bifurcation Sleeve
+
+When market conditions permit (TREND, RUPTURE_PREP, or RUPTURE_ACTIVE states), the system can generate nested leg plans:
+
+- **Leg 1**: Initial direction (call/put) with base sizing
+- **Leg 2+**: Flipped direction with progressive sizing based on previous leg's stop loss
+- **Sizing**: Kelly-limited with configurable cap (default: 20% of capital)
+- **Stop Loss**: Per-leg fractional stops (default: 9.7%)
+
+## Data Requirements
+
+The script expects data in the following structure:
+
+**Stock Data:**
+- Location: `F:/inputs/stocks/`
+- Format: CSV files with columns: `Date`, `Close/Last`, `Volume`, `Open`, `High`, `Low`
+- Example: `F:/inputs/stocks/SPY.csv`
+
+**Option Chain Data:**
+- Location: `F:/inputs/options/log/{ticker}/`
+- Format: CSV files named `{ticker}_quotedata.csv` in date directories
+- Example: `F:/inputs/options/log/spy/12_22_2025/spy_quotedata.csv`
+
+You can modify the base directories in `data_loader.py` if your data is stored elsewhere.
 
 ## Example Output
 
+### Terminal Summary
+
 ```
->>> Starting Markov Blanket Analysis for Option Pricing
+>>> Markov Blanket-Driven Option Pricing: Predictive Model
 
-+----------------------------- Analysis Overview ------------------------------+
-| Markov Blanket Analysis for Option Pricing                                   |
-|                                                                              |
-| This analysis identifies the minimal set of variables that render the option |
-| premium conditionally independent of all other variables in the Bayesian     |
-| network.                                                                     |
-+------------------------------------------------------------------------------+
+>>> Loading Option Data
+Loaded 1247 option contracts for SPY
+Stock price: $684.83
 
-                  Markov Blanket Components for Option_Premium
-+------------------------------------------------------------------------------+
-| Component                 | Variables                                | Count |
-|---------------------------+------------------------------------------+-------|
-| Parents (Direct Causes)   | Spot_Price, Volatility, Interest_Rate,   |     5 |
-|                           | Time_to_Expiration, Strike_Price         |       |
-| Children (Direct Effects) | Trading_Volume                           |     1 |
-| Spouses (Co-parents)      | News                                     |     1 |
-| Markov Blanket            | Spot_Price, Volatility, Interest_Rate,   |     7 |
-|                           | Time_to_Expiration, Strike_Price,        |       |
-|                           | Trading_Volume, News                     |       |
-+------------------------------------------------------------------------------+
+>>> Training Models
+Classical model - CV MAE: $0.33, CV R²: -0.280
+Full model - CV MAE: $0.33, CV R²: -0.280
+Combined (classical + residual) - Test MAE: $0.20, R²: 0.170
 
-                   SPY Option Chain Summary
-┏━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━┓
-┃ Strike ┃ Call Bid/Ask ┃ Put Bid/Ask ┃ Moneyness ┃    Volume ┃
-┡━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━┩
-│   $681 │ $3.95/$4.08  │ $0.00/$0.01 │    ITM    │   165,699 │
-│   $682 │ $2.00/$3.06  │ $0.00/$0.01 │    ITM    │   341,873 │
-│   $683 │ $1.30/$2.07  │ $0.00/$0.01 │    ITM    │   782,567 │
-│   $684 │ $0.79/$1.05  │ $0.00/$0.01 │    ATM    │ 1,322,801 │
-│   $685 │ $0.03/$0.04  │ $0.04/$0.05 │    ATM    │ 1,423,620 │
-│   $686 │ $0.00/$0.01  │ $0.84/$1.05 │    OTM    │   530,491 │
-│   $687 │ $0.00/$0.01  │ $1.92/$2.21 │    OTM    │   189,541 │
-│   $688 │ $0.00/$0.01  │ $1.63/$3.03 │    OTM    │    53,211 │
-│   $689 │ $0.00/$0.01  │ $2.63/$5.34 │    OTM    │    20,909 │
-└────────┴──────────────┴─────────────┴───────────┴───────────┘
+>>> Teixiptla-Garage-Markov Kelly Gate
+Regime: PIN
+Structure: PROBE_ONLY
+Kelly (fractional): 0.0000
+Gate state: BLOCK
 
-SUCCESS: Option chain data saved to:
-  CSV: ..\output\SPY_option_chain_20251222_221107.csv
-  Text: ..\output\SPY_option_chain_20251222_221107.txt
+>>> State Machine
+Current state: PIN
+Actions: No directional trades; probes only, no reflexive sleeve.
+
+>>> Reflexive Bifurcation Sleeve
+Gate: BLOCKED
+Reason: Kelly Gate or Teixiptla regime does not permit reflexive nesting.
+```
+
+### Universal Mode Summary
+
+```
+UNIVERSAL MODE SUMMARY
+================================================================================
+Successfully processed: 3/39 tickers
+
+Successful: SPY, QQQ, IWM
+
+Failed: DIA, GLD, SLV, ...
+
+Reports saved to: ..\output\markov
 ```
 
 ## Theoretical Background
@@ -275,12 +392,13 @@ The concept of a Markov blanket is rooted in the **Markov condition**, which sta
 2. **Feature Selection**: The Markov blanket provides an optimal feature set, avoiding irrelevant variables
 3. **Causal Understanding**: Reveals causal relationships between market variables
 4. **Market Inefficiencies**: Can capture effects like volatility smiles, fat tails, and sentiment-driven movements
+5. **Permission Layers**: Kelly Gate and State Machine provide explicit trading decision frameworks
 
 ### References
 
 - Pearl, Judea (1988). *Probabilistic Reasoning in Intelligent Systems: Networks of Plausible Inference*
 - Statnikov, Alexander et al. (2013). "Algorithms for discovery of multiple Markov boundaries"
-- See `wiki` and `outlineA.md` for more detailed theoretical background
+- See `wiki.md` and `dev/outlineA.md` for more detailed theoretical background
 
 ## Customization
 
@@ -288,13 +406,15 @@ The concept of a Markov blanket is rooted in the **Markov condition**, which sta
 
 Edit the `adjacency_matrix` in `MarkovBlanketAnalyzer.__init__()` to modify the Bayesian network structure.
 
-### Adjusting Strike Range
+### Adjusting Minimum Data Requirements
 
-Modify the strike selection logic in `display_option_chain_table()` to show more or fewer strikes around the current price.
+The minimum number of samples required for training is set to 40 (configurable in `testB.py` line 417).
 
-### Output Directory
+### Output Directories
 
-Change the `output_dir` path in `display_option_chain_table()` to save files to a different location.
+- Single ticker: `../output/analysis_{TIMESTAMP}/`
+- Universal mode: `../output/markov/{TICKER}/`
+- Aggregate reports: `../output/markov/aggregated/`
 
 ## License
 
@@ -304,9 +424,10 @@ This project is part of the stock-monitor metascripts collection.
 
 Feel free to extend this implementation with:
 - Additional market variables
-- Machine learning models using the Markov blanket features
-- Different visualization styles
+- Different machine learning models
+- Enhanced visualization styles
 - Support for additional option chains
+- Custom state machine transitions
 
 ---
 

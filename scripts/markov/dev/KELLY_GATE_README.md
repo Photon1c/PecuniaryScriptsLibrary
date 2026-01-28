@@ -11,6 +11,7 @@ The Kelly Gate module has been integrated into `testB.py` as a permission layer 
 **Note:** This module works in conjunction with:
 - **State Machine** (`state_machine.py`): Maps Kelly Gate signals to explicit market states
 - **Reflexive Bifurcation Sleeve** (`reflexive_bifurcation.py`): Generates nested leg plans when permitted
+- **Markov Engine** (`markov_engine.py`, `testC.py`): Explicit Markov chain analysis for regime transitions (v10)
 
 ## New Features
 
@@ -39,7 +40,7 @@ The Kelly Gate module has been integrated into `testB.py` as a permission layer 
 
 ## How to Run
 
-### Basic Usage
+### Basic Usage (testB.py)
 ```powershell
 python testB.py --ticker SPY
 ```
@@ -68,6 +69,31 @@ python testB.py --ticker SPY --output ./my_results
 ```powershell
 python testB.py --ticker SPY --skip-shap
 ```
+
+### Markov Engine Integration (testC.py - v10)
+
+**testC.py** extends Kelly Gate with explicit Markov chain analysis:
+
+```powershell
+# Basic run (builds state history)
+python testC.py --ticker SPY
+
+# With historical state file
+python testC.py --ticker SPY --markov-history-file history.json
+
+# Custom Kolmogorov flow horizon
+python testC.py --ticker SPY --markov-horizon 10.0
+
+# Universal mode (builds state history incrementally)
+python testC.py --universal --markov-horizon 5.0
+```
+
+The Markov engine provides:
+- **Transition matrix P**: Estimated from historical regime/gate states
+- **Stationary distribution π**: Ergodic occupation frequencies
+- **Kolmogorov flow**: Continuous-time evolution dp/dt = pQ
+- **Risk flags**: STABLE_PIN, DRIFTING_EXPRESSIVE, RUPTURE_DRIFT, TRANSIENT_UNCERTAIN
+- **Kelly modifiers**: Adjusts Kelly fractions based on π and flow diagnostics
 
 ## Output Files
 
@@ -195,6 +221,60 @@ Multiplier: 0.712
 - **PROBE**: kelly_adjusted < 0.01 OR quality_score < 0.5 OR regime == PIN
 - **DEPLOY**: Otherwise
 
+## Markov Engine Integration (v10 - testC.py)
+
+**testC.py** extends Kelly Gate with explicit Markov chain analysis:
+
+### Additional Output Fields (testC.py)
+
+The `gate.json` file in testC.py includes additional Markov diagnostics:
+
+```json
+{
+  ... (all standard Kelly Gate fields) ...,
+  "markov_analysis": {
+    "P": [[...], [...], ...],  // Transition matrix
+    "pi": [...],                // Stationary distribution
+    "Q": [[...], [...], ...],   // Generator matrix
+    "p0": [...],                // Initial distribution
+    "p_short": [...],           // Short-horizon distribution
+    "occupation": [...],        // Empirical occupation frequencies
+    "risk_flag": "STABLE_PIN",  // Markov risk flag
+    "kelly_modifier": 0.1       // Kelly fraction modifier
+  },
+  "markov_risk_flag": "STABLE_PIN",
+  "markov_kelly_modifier": 0.1,
+  "kelly_fractional_markov": 0.0006,  // Kelly after Markov modifier
+  "kelly_adjusted_markov": 0.0004     // Adjusted Kelly after Markov modifier
+}
+```
+
+### Markov Risk Flags
+
+- **STABLE_PIN**: π[PIN] > 0.7 and flow remains PIN-dominant → Kelly modifier = 0.1 (very conservative)
+- **DRIFTING_EXPRESSIVE**: Probability leaking from PIN to EXPRESSIVE → Kelly modifier = 0.6 (moderate)
+- **RUPTURE_DRIFT**: Significant rupture probability in flow → Kelly modifier = 0.8 (allow higher but still gated)
+- **TRANSIENT_UNCERTAIN**: Early or unstable regime → Kelly modifier = 0.3 (conservative default)
+
+### Integration Logic
+
+1. **State History Building**: Regime observations are automatically added to historical sequence
+2. **Transition Estimation**: When ≥3 states available, estimates P from empirical transitions
+3. **Stationary Distribution**: Computes π solving π = πP
+4. **Flow Evolution**: Evolves Kolmogorov flow dp/dt = pQ for short-horizon forecasts
+5. **Risk Assessment**: Computes risk flag and Kelly modifier based on π and p(t)
+6. **Gate Adjustment**: STABLE_PIN forces gate to BLOCK/THROTTLED; other flags adjust Kelly
+
+### State History File Format
+
+```json
+{
+  "states": ["PIN", "PIN", "EXPRESSIVE", "PIN", "RUPTURE_CANDIDATE"]
+}
+```
+
+State history is automatically saved to `markov_state_history.json` after each run.
+
 ## Notes
 
 - All existing outputs and metrics are preserved
@@ -202,6 +282,7 @@ Multiplier: 0.712
 - Default values are conservative (safe fallbacks)
 - `--debug` flag prints intermediate feature values and p,b estimation details
 - Output folder naming convention preserved: `../output/analysis_YYYYMMDD_HHMMSS`
+- **Markov Engine** (testC.py): Requires ≥3 historical states for analysis; builds incrementally in universal mode
 
 ## Teixiptla Anatomy
 

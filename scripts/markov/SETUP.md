@@ -91,6 +91,27 @@ python testB.py --universal
 python testB.py --ticker SPY --capital 50000 --debug --skip-shap
 ```
 
+### testC.py - Markov Engine Integration (v10)
+
+**Single Ticker:**
+```powershell
+# Basic run
+python testC.py --ticker SPY
+
+# With historical state file
+python testC.py --ticker SPY --markov-history-file history.json
+
+# Custom Kolmogorov flow horizon
+python testC.py --ticker SPY --markov-horizon 10.0
+```
+
+**Universal Mode (Builds State History):**
+```powershell
+python testC.py --universal --markov-horizon 5.0
+```
+
+**Note:** Markov analysis requires at least 3 historical state observations. The system will note insufficient history if running for the first time. State history is saved automatically and can be reused in subsequent runs.
+
 ### aggregate_reports.py - Report Aggregation
 
 Generate summary tables from all ticker reports:
@@ -129,6 +150,7 @@ These modules must be available in your Python path:
 - **testA** - MarkovBlanketAnalyzer class (should be in same directory as testB.py)
 
 The following modules are part of this package and should be in the same directory:
+- **markov_engine.py** - Markov chain engine (for testC.py)
 - **markov_mask.py** - Markov Masks module
 - **reflexive_bifurcation.py** - Reflexive sleeve planning
 - **state_machine.py** - Market state classification
@@ -277,7 +299,20 @@ python testB.py --ticker SPY --skip-shap
 python testB.py --universal --capital 50000
 ```
 
-### Example 3: Generate Aggregate Reports
+### Example 3: Markov Engine Integration (testC.py)
+
+```powershell
+# First run (will note insufficient history)
+python testC.py --ticker SPY
+
+# Subsequent runs use saved state history
+python testC.py --ticker SPY
+
+# Or provide historical states manually
+python testC.py --ticker SPY --markov-history-file history.json
+```
+
+### Example 4: Generate Aggregate Reports
 
 ```powershell
 # First, run universal mode to generate reports
@@ -287,13 +322,21 @@ python testB.py --universal
 python aggregate_reports.py
 ```
 
-### Example 4: Debug Mode
+### Example 5: Debug Mode
 
 ```powershell
 python testB.py --ticker SPY --debug
 ```
 
 This will show detailed Kelly Gate calculations and state machine logic.
+
+### Example 6: Markov Engine with Custom Horizon
+
+```powershell
+python testC.py --ticker SPY --markov-horizon 10.0 --markov-rate-scale 1.5 --debug
+```
+
+This will show Markov engine diagnostics and flow evolution.
 
 ## Output Structure
 
@@ -317,6 +360,7 @@ After running, you'll find:
   │   └── reflexive_plan.json (if applicable)
   ├── QQQ/
   │   └── ...
+  ├── markov_state_history.json (testC.py only)
   └── aggregated/
       ├── all_tickers_combined_*.csv
       ├── summary_*.csv
@@ -327,8 +371,9 @@ After running, you'll find:
 
 1. **Run testA.py** to see Markov blanket discovery in action
 2. **Run testB.py** with a single ticker to understand the full pipeline
-3. **Run universal mode** to process all tickers
-4. **Generate aggregate reports** to see summary statistics
-5. **Review the reports** in markdown and CSV formats
+3. **Run testC.py** to see Markov engine integration (requires state history)
+4. **Run universal mode** to process all tickers (testC.py builds state history incrementally)
+5. **Generate aggregate reports** to see summary statistics
+6. **Review the reports** in markdown and CSV formats
 
 For more details, see [README.md](README.md).

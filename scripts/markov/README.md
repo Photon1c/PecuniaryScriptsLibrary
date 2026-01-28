@@ -10,6 +10,7 @@ The system includes:
 - **Markov Blanket Discovery**: Optimal feature selection via Bayesian networks
 - **Machine Learning Models**: LightGBM-based predictive models with residual decomposition
 - **Kelly Gate**: Permission layer for option trading with regime inference
+- **Markov Engine** (v10): Explicit Markov chain analysis for regime/gate state transitions
 - **State Machine**: Explicit market state classification (PIN, RANGE, TREND, RUPTURE, etc.)
 - **Reflexive Bifurcation Sleeve**: Nested leg planning for option strategies
 - **Markov Masks**: Contract-level agency encoding
@@ -42,6 +43,7 @@ This set shields $P$ from irrelevant variables and serves as an optimal feature 
 
 ### Trading Decision Framework
 - ✅ **Kelly Gate**: Regime inference (PIN/EXPRESSIVE/RUPTURE_CANDIDATE), structure family recommendation, Kelly sizing
+- ✅ **Markov Engine** (v10): Discrete-time transition matrix P, stationary distribution π, continuous-time generator Q, Kolmogorov flow evolution
 - ✅ **State Machine**: Explicit market state classification with action policies
 - ✅ **Reflexive Bifurcation Sleeve**: Nested leg planning for option strategies
 - ✅ **Markov Masks**: Contract-level agency encoding (SENSITIVE/EXPRESSIVE/DORMANT)
@@ -110,6 +112,58 @@ python testB.py --ticker SPY --skip-shap
 # Debug mode (detailed Kelly Gate output)
 python testB.py --ticker SPY --debug
 ```
+
+### Markov Engine Integration (testC.py - v10)
+
+**testC.py** is an enhanced, better-organized version of testB.py with explicit Markov chain engine integration:
+
+#### Key Features
+- **Discrete-time Markov chain**: Transition matrix P estimation from historical state sequences
+- **Stationary distribution π**: Computes ergodic occupation frequencies
+- **Continuous-time generator Q**: Kolmogorov forward equation dp/dt = pQ
+- **Markov risk flags**: STABLE_PIN, DRIFTING_EXPRESSIVE, RUPTURE_DRIFT, TRANSIENT_UNCERTAIN
+- **Kelly modifiers**: Adjusts Kelly fractions based on π and flow diagnostics
+- **Enhanced reporting**: New "Markov Engine" and "Kolmogorov Flow" sections
+
+#### Single Ticker with Markov Engine
+
+```bash
+# Basic run (will note insufficient history if < 3 states)
+python testC.py --ticker SPY
+
+# With historical state file
+python testC.py --ticker SPY --markov-history-file history.json
+
+# Custom Kolmogorov flow horizon
+python testC.py --ticker SPY --markov-horizon 10.0
+
+# Custom rate scale for generator
+python testC.py --ticker SPY --markov-rate-scale 1.5
+```
+
+#### Universal Mode with Markov Engine
+
+```bash
+# Builds state history incrementally across tickers
+python testC.py --universal --markov-horizon 5.0
+
+# With custom rate scale
+python testC.py --universal --markov-horizon 5.0 --markov-rate-scale 1.0
+```
+
+**Markov Engine Arguments:**
+- `--markov-horizon FLOAT` - Kolmogorov flow horizon (default: 5.0)
+- `--markov-rate-scale FLOAT` - Generator rate scale (default: 1.0)
+- `--markov-history-file PATH` - JSON file with historical state sequence
+
+**State History Format:**
+```json
+{
+  "states": ["PIN", "PIN", "EXPRESSIVE", "PIN", "RUPTURE_CANDIDATE"]
+}
+```
+
+The system automatically saves state history to `markov_state_history.json` after each run.
 
 #### Universal Mode (Batch Processing)
 
@@ -208,6 +262,27 @@ The full analysis pipeline includes:
 10. **Visualizations**: SHAP plots, correlation heatmaps, analysis charts
 11. **Report Generation**: Saves models, JSON, CSV, and markdown reports
 
+## What testC.py Does (v10 - Markov Engine)
+
+**testC.py** extends testB.py with explicit Markov chain analysis:
+
+1. **All testB.py features** (steps 1-11 above)
+2. **Markov Engine Integration**:
+   - Estimates transition matrix P from historical regime/gate state sequences
+   - Computes stationary distribution π solving π = πP
+   - Estimates continuous-time generator Q from P
+   - Evolves Kolmogorov flow: dp/dt = pQ for short-horizon regime forecasts
+   - Computes Markov risk flags based on π and flow diagnostics
+   - Applies Kelly modifiers based on Markov diagnostics
+3. **Enhanced Reporting**:
+   - New "Markov Engine" section: P, π, occupation frequencies, KL divergence
+   - New "Kolmogorov Flow" section: p(0), p(t) for multiple horizons, flow interpretation
+   - Enhanced narrative with references to "memory without collapse" and regime stability
+4. **State History Management**:
+   - Automatically builds state history from regime observations
+   - Saves/loads state history from JSON files
+   - Incremental history building in universal mode
+
 ## File Structure
 
 ```
@@ -217,9 +292,11 @@ markov/
 ├── requirements.txt             # Python dependencies
 ├── testA.py                     # Network analysis (Markov blanket discovery)
 ├── testB.py                     # Full predictive model (ML + Kelly Gate + State Machine)
-├── aggregate_reports.py         # Batch report aggregator
+├── testC.py                     # Enhanced version with Markov Engine (v10)
+├── markov_engine.py             # Markov chain engine module
+├── aggregate_reports.py          # Batch report aggregator
 ├── markov_mask.py               # Markov Masks module (contract-level agency)
-├── reflexive_bifurcation.py    # Reflexive sleeve planning
+├── reflexive_bifurcation.py     # Reflexive sleeve planning
 ├── state_machine.py             # Market state classification
 ├── data_loader.py               # Data loading utilities
 ├── test_viz.py                  # Visualization test script
@@ -240,6 +317,7 @@ Results are saved to `../output/analysis_{TIMESTAMP}/`:
 - **Models**: `classical_model.pkl`, `full_model.pkl`, `residual_model.pkl`, `skew_model.pkl`
 - **Data**: `contract_scores.csv`, `markov_masks.csv`, `markov_masks.json`
 - **Gate Results**: `gate.json`, `reflexive_plan.json`
+- **Markov Engine** (testC.py only): `markov_state_history.json`
 - **Visualizations**: 
   - `feature_correlation_{timestamp}.png`
   - `markov_blanket_analysis_{timestamp}.png`
@@ -309,6 +387,33 @@ The state machine maps current market signals into explicit states:
 - **COOLDOWN**: Stand down, no new risk
 
 States are derived from regime, Kelly fraction, and gate state.
+
+## Markov Engine (v10 - testC.py)
+
+The Markov engine treats regime/gate states as a Markov chain, providing both discrete-time and continuous-time analysis:
+
+### Discrete-Time Lens
+- **Transition Matrix P**: Estimated from historical state sequences
+- **Stationary Distribution π**: Solves π = πP using power iteration
+- **Ergodic Occupation**: Empirical occupation frequencies vs. π
+- **Mixing Time**: Convergence rate of Pⁿ to π
+
+### Continuous-Time Lens
+- **Generator Q**: Estimated from P via Q = rate_scale × (P - I)
+- **Kolmogorov Flow**: Numerically integrates dp/dt = pQ
+- **Short-Horizon Forecasts**: p(t) at multiple horizons (e.g., t=1, t=5)
+
+### Risk Flags
+- **STABLE_PIN**: π[PIN] > 0.7 and flow remains PIN-dominant → very conservative
+- **DRIFTING_EXPRESSIVE**: Probability leaking from PIN to EXPRESSIVE → moderate
+- **RUPTURE_DRIFT**: Significant rupture probability in flow → allow higher Kelly but still gated
+- **TRANSIENT_UNCERTAIN**: Early or unstable regime → conservative default
+
+### Integration with Kelly Gate
+- Markov risk flags feed into gate state decisions
+- Kelly modifiers (0.1-0.8) multiply existing Kelly fractions
+- STABLE_PIN forces gate to BLOCK/THROTTLED
+- Flow diagnostics inform regime stability assessment
 
 ## Reflexive Bifurcation Sleeve
 

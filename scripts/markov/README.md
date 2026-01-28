@@ -159,9 +159,11 @@ python testC.py --universal --markov-horizon 5.0 --markov-rate-scale 1.0
 **State History Format:**
 ```json
 {
-  "states": ["PIN", "PIN", "EXPRESSIVE", "PIN", "RUPTURE_CANDIDATE"]
+  "states": ["PIN", "PIN", "PRE_TRANSFER", "PIN", "TRANSFER"]
 }
 ```
+
+**Note:** The states should match the Kelly Gate regimes: `PIN`, `PRE_TRANSFER`, or `TRANSFER`. The system will automatically map these to the Markov engine state space.
 
 The system automatically saves state history to `markov_state_history.json` after each run.
 

@@ -18,8 +18,17 @@ from enum import Enum
 
 
 class RegimeState(Enum):
-    """Regime states for the Markov chain."""
+    """Regime states for the Markov chain.
+    
+    These match the Kelly Gate regime inference:
+    - PIN: Price in noise (efficient pricing)
+    - PRE_TRANSFER: Building inefficiency, moderate signals
+    - TRANSFER: High model confidence, strong skew signals
+    """
     PIN = "PIN"
+    PRE_TRANSFER = "PRE_TRANSFER"
+    TRANSFER = "TRANSFER"
+    # Additional states for future expansion
     EXPRESSIVE = "EXPRESSIVE"
     RUPTURE_CANDIDATE = "RUPTURE_CANDIDATE"
     GARAGE = "GARAGE"
@@ -57,9 +66,10 @@ class MarkovEngine:
             regime_states: List of regime state names (default: all RegimeState values)
             gate_states: List of gate state names (default: all GateState values)
         """
-        # Default state spaces
+        # Default state spaces - use Kelly Gate regimes by default
         if regime_states is None:
-            regime_states = [s.value for s in RegimeState]
+            # Default to Kelly Gate regimes (PIN, PRE_TRANSFER, TRANSFER)
+            regime_states = ["PIN", "PRE_TRANSFER", "TRANSFER"]
         if gate_states is None:
             gate_states = [s.value for s in GateState]
         
@@ -294,23 +304,39 @@ class MarkovEngine:
             - risk_flag: MarkovRiskFlag enum
             - kelly_modifier: Scalar in (0, 1] that multiplies existing Kelly fraction
         """
-        # Get state indices
+        # Get state indices (handle both Kelly Gate and extended state spaces)
         pin_idx = self.state_to_idx.get("PIN", 0)
-        expressive_idx = self.state_to_idx.get("EXPRESSIVE", 1)
-        rupture_idx = self.state_to_idx.get("RUPTURE_CANDIDATE", 2)
+        # Check for PRE_TRANSFER/TRANSFER (Kelly Gate) or EXPRESSIVE/RUPTURE_CANDIDATE (extended)
+        pre_transfer_idx = self.state_to_idx.get("PRE_TRANSFER", -1)
+        transfer_idx = self.state_to_idx.get("TRANSFER", -1)
+        expressive_idx = self.state_to_idx.get("EXPRESSIVE", pre_transfer_idx if pre_transfer_idx >= 0 else 1)
+        rupture_idx = self.state_to_idx.get("RUPTURE_CANDIDATE", transfer_idx if transfer_idx >= 0 else 2)
         
         # Extract probabilities
-        pi_pin = pi[pin_idx] if pin_idx < len(pi) else 0.0
-        pi_expressive = pi[expressive_idx] if expressive_idx < len(pi) else 0.0
-        pi_rupture = pi[rupture_idx] if rupture_idx < len(pi) else 0.0
+        pi_pin = pi[pin_idx] if pin_idx >= 0 and pin_idx < len(pi) else 0.0
         
-        p_short_pin = p_short[pin_idx] if pin_idx < len(p_short) else 0.0
-        p_short_expressive = p_short[expressive_idx] if expressive_idx < len(p_short) else 0.0
-        p_short_rupture = p_short[rupture_idx] if rupture_idx < len(p_short) else 0.0
+        # Handle both Kelly Gate regimes (PRE_TRANSFER/TRANSFER) and extended (EXPRESSIVE/RUPTURE_CANDIDATE)
+        pi_pre_transfer = pi[pre_transfer_idx] if pre_transfer_idx >= 0 and pre_transfer_idx < len(pi) else 0.0
+        pi_transfer = pi[transfer_idx] if transfer_idx >= 0 and transfer_idx < len(pi) else 0.0
+        pi_expressive = pi[expressive_idx] if expressive_idx >= 0 and expressive_idx < len(pi) else 0.0
+        pi_rupture = pi[rupture_idx] if rupture_idx >= 0 and rupture_idx < len(pi) else 0.0
         
-        # Decision logic
-        pi_expressive_total = pi_expressive + pi_rupture
-        p_short_expressive_total = p_short_expressive + p_short_rupture
+        p_short_pin = p_short[pin_idx] if pin_idx >= 0 and pin_idx < len(p_short) else 0.0
+        p_short_pre_transfer = p_short[pre_transfer_idx] if pre_transfer_idx >= 0 and pre_transfer_idx < len(p_short) else 0.0
+        p_short_transfer = p_short[transfer_idx] if transfer_idx >= 0 and transfer_idx < len(p_short) else 0.0
+        p_short_expressive = p_short[expressive_idx] if expressive_idx >= 0 and expressive_idx < len(p_short) else 0.0
+        p_short_rupture = p_short[rupture_idx] if rupture_idx >= 0 and rupture_idx < len(p_short) else 0.0
+        
+        # Decision logic - combine PRE_TRANSFER/TRANSFER or EXPRESSIVE/RUPTURE_CANDIDATE
+        # Use whichever is available in the state space
+        if pre_transfer_idx >= 0 or transfer_idx >= 0:
+            # Kelly Gate regimes
+            pi_expressive_total = pi_pre_transfer + pi_transfer
+            p_short_expressive_total = p_short_pre_transfer + p_short_transfer
+        else:
+            # Extended state space
+            pi_expressive_total = pi_expressive + pi_rupture
+            p_short_expressive_total = p_short_expressive + p_short_rupture
         
         # STABLE_PIN: π[PIN] > threshold and p_short still PIN-dominant
         if pi_pin > threshold_pin and p_short_pin > threshold_pin:
@@ -322,8 +348,11 @@ class MarkovEngine:
             if p_short_expressive_total > pi_expressive_total:
                 return MarkovRiskFlag.DRIFTING_EXPRESSIVE, 0.6  # Moderate
         
-        # RUPTURE_DRIFT: Significant rupture probability in flow
-        if p_short_rupture > 0.15 or (pi_rupture > 0.1 and p_short_rupture > pi_rupture):
+        # RUPTURE_DRIFT: Significant rupture/transfer probability in flow
+        # Check both TRANSFER (Kelly Gate) and RUPTURE_CANDIDATE (extended)
+        p_short_rupture_total = max(p_short_rupture, p_short_transfer) if transfer_idx >= 0 else p_short_rupture
+        pi_rupture_total = max(pi_rupture, pi_transfer) if transfer_idx >= 0 else pi_rupture
+        if p_short_rupture_total > 0.15 or (pi_rupture_total > 0.1 and p_short_rupture_total > pi_rupture_total):
             return MarkovRiskFlag.RUPTURE_DRIFT, 0.8  # Allow higher Kelly but still gated
         
         # TRANSIENT_UNCERTAIN: Early or unstable regime

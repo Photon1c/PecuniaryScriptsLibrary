@@ -112,6 +112,15 @@ python testC.py --universal --markov-horizon 5.0
 
 **Note:** Markov analysis requires at least 3 historical state observations. The system will note insufficient history if running for the first time. State history is saved automatically and can be reused in subsequent runs.
 
+**State History Format:**
+```json
+{
+  "states": ["PIN", "PIN", "PRE_TRANSFER", "PIN", "TRANSFER"]
+}
+```
+
+States should be Kelly Gate regimes: `PIN`, `PRE_TRANSFER`, or `TRANSFER`.
+
 ### aggregate_reports.py - Report Aggregation
 
 Generate summary tables from all ticker reports:

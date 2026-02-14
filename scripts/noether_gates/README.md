@@ -1,4 +1,4 @@
-# Noether Early Detection – Regime Gate Smoke Test
+# Noether Early Detection – Regime Gate Smoke Test 🚪💨
 
 ## Overview
 

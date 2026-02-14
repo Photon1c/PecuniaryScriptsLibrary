@@ -1,4 +1,4 @@
-# noether_early_detection.py
+# noether_theorem_early_detection.py
 # Focus: EARLY DETECTION (A) — does the gate close *before* drawdowns begin?
 #
 # Strategy: simple 20D momentum + Kelly sizing + Noether-style regime gate.

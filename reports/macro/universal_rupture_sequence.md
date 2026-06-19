@@ -1,3 +1,5 @@
+# Phases
+
 | Phase / Failure Mechanics | Natural System / Social Reactor | Economic System |
 | :--- | :--- | :--- |
 | **Phase I:** External forcing applied | Population / economic growth shock | Demand or demographic influx |
@@ -7,3 +9,12 @@
 | **Phase V:** Crack propagation accelerates | Dependency burden recursively compounds | Fiscal deficits, unemployment loops |
 | **Phase VI:** Material can no longer self-maintain | Maintenance systems fail | Public services degrade |
 | **Phase VII:** Structural rupture | System-wide instability | Economic contraction / political crisis |
+
+# Sequences  
+I. External Load Introduction  
+II. Dissipative Compensation  
+III. Internal Burden Redistribution  
+IV. Component Defection  
+V. Recursive Pressure Amplification  
+VI. Maintenance Threshold Failure  
+VII. Structural Rupture  
